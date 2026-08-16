@@ -22,25 +22,40 @@ st.markdown("""
         
         #MainMenu {display: none !important; visibility: hidden !important;} 
         footer {display: none !important; visibility: hidden !important;} 
-        header {display: none !important; visibility: hidden !important;} 
+        /* header {display: none !important;} ELIMINADO PARA DEJAR VIVIR AL BOTÓN DE LA BARRA LATERAL */
         
         [data-testid="stDecoration"], [data-testid="stToolbar"], [data-testid="stStatusWidget"], [data-testid="manage-app-button"], .viewerBadge_container, .viewerBadge_link {display: none !important;}
         a[href^="https://streamlit.io"] {display: none !important;}
 
+        /* DISEÑO DE CAJAS DE MÉTRICAS */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            justify-content: center !important;
+            width: 100% !important;
         }
         
-        /* FIX PARA QUE LOS TEXTOS DE LAS MÉTRICAS NO SE CORTEN CON "..." */
+        /* FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
+        [data-testid="stMetricLabel"] {
+            text-align: left !important;
+            width: 100% !important;
+        }
+        [data-testid="stMetricValue"] {
+            text-align: left !important;
+            width: 100% !important;
+        }
         [data-testid="stMetricValue"] > div {
             white-space: normal !important;
             word-wrap: break-word !important;
             font-size: 1.6rem !important;
             line-height: 1.2 !important;
+            text-align: left !important;
         }
 
         h1 { color: #4A90E2 !important; font-weight: 700 !important; letter-spacing: -0.5px; }
@@ -766,7 +781,7 @@ with tab6:
                             
     if alertas_futuras:
         df_futuro = pd.DataFrame(alertas_futuras).sort_values("Inicio Proyectado").reset_index(drop=True)
-        st.warning(f"¡ATENCIÓN! Se proyectan superaciones a la norma en **{len(alertas_futuras)}** estaciones para los próximos días.")
+        st.warning(f"⚠️ ¡ATENCIÓN! Se proyectan superaciones a la norma en **{len(alertas_futuras)}** estaciones para los próximos días.")
         st.dataframe(df_futuro, use_container_width=True, hide_index=True)
         
         # --- GRÁFICOS AUTOMÁTICOS PARA EL FUTURO ---
@@ -797,4 +812,4 @@ with tab6:
             st.plotly_chart(fig_sat, use_container_width=True)
 
     else:
-        st.info("El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
+        st.info("✅ El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
