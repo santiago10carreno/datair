@@ -619,4 +619,5 @@ with tab6:
         st.warning(f"⚠️ ¡ATENCIÓN! Se proyectan superaciones a la norma en **{len(alertas_futuras)}** estaciones para los próximos días.")
         st.dataframe(df_futuro, use_container_width=True, hide_index=True)
     else:
-        st.info("✅ El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
+        st.info("El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
+        
