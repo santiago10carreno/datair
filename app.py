@@ -69,7 +69,7 @@ st.markdown("""
             border: 1px solid #3A3F47;
             border-radius: 8px;
             padding: 25px;
-            height: 100%;
+            margin-top: 20px;
             border-top: 4px solid #8F3F97; 
         }
     </style>
@@ -270,7 +270,6 @@ ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 # ==========================================
 st.sidebar.title("Datair OS")
 
-# Gestión de Estado para la fuente de datos
 if "fuente_datos" not in st.session_state:
     st.session_state.fuente_datos = "Open-Meteo (Modelo Global)"
 
@@ -285,7 +284,6 @@ else:
 
 st.sidebar.subheader("Parámetros Principales")
 
-# ORDEN SOLICITADO: 1. Contaminante, 2. Fuente, 3. Módulos
 contaminante_elegido = st.sidebar.selectbox("Contaminante a Analizar", contaminantes_disponibles)
 
 fuente_datos = st.sidebar.selectbox(
@@ -686,41 +684,39 @@ elif modulo_activo == "Simulador":
             df_pluma_ai = pd.DataFrame(puntos_pluma)
             supera_norma = concentracion_max > limite_actual
             
-            col_mapa, col_reporte = st.columns([1.3, 1])
+            # Renderizado del mapa a ancho completo
+            st.markdown(f"**Mapa de Impacto Proyectado (Viento actual: {vel_viento} km/h hacia el {int(angulo_viaje)}º)**")
+            fig_ai = px.density_mapbox(
+                df_pluma_ai, lat="Latitud", lon="Longitud", z="Concentracion",
+                radius=60, center={"lat": lat_em, "lon": lon_em}, 
+                zoom=12, mapbox_style="carto-darkmatter", color_continuous_scale="Reds", opacity=0.7
+            )
+            fig_ai.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
+            st.plotly_chart(fig_ai, use_container_width=True)
+
+            # Renderizado del reporte justo debajo del mapa
+            st.markdown("<div class='ai-report-box'>", unsafe_allow_html=True)
+            st.markdown("### Reporte de Datair AI")
             
-            with col_mapa:
-                st.markdown(f"**Mapa de Impacto Proyectado (Viento actual: {vel_viento} km/h hacia el {int(angulo_viaje)}º)**")
-                fig_ai = px.density_mapbox(
-                    df_pluma_ai, lat="Latitud", lon="Longitud", z="Concentracion",
-                    radius=60, center={"lat": lat_em, "lon": lon_em}, 
-                    zoom=12, mapbox_style="carto-darkmatter", color_continuous_scale="Reds", opacity=0.7
-                )
-                fig_ai.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
-                st.plotly_chart(fig_ai, use_container_width=True)
+            if supera_norma:
+                st.error(f"**RIESGO CRÍTICO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, superando el límite legal de {limite_actual} µg/m³ para {contaminante_elegido}.")
+            else:
+                st.success(f"**RIESGO BAJO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, manteniéndose bajo el límite legal de {limite_actual} µg/m³ para {contaminante_elegido}.")
 
-            with col_reporte:
-                st.markdown("<div class='ai-report-box'>", unsafe_allow_html=True)
-                st.markdown("### Reporte de Datair AI")
-                
-                if supera_norma:
-                    st.error(f"**RIESGO CRÍTICO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, superando el límite legal de {limite_actual} µg/m³ para {contaminante_elegido}.")
-                else:
-                    st.success(f"**RIESGO BAJO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, manteniéndose bajo el límite legal de {limite_actual} µg/m³ para {contaminante_elegido}.")
+            st.markdown("#### Impacto Comunitario")
+            st.write(f"Con {temp_actual} °C y vientos de {vel_viento} km/h, la pluma se desplazará hacia el **{int(angulo_viaje)}°**. Ecosistemas en un radio de **{int(distancia_impacto)} m** en esta dirección recibirán el mayor impacto.")
 
-                st.markdown("#### Impacto Comunitario")
-                st.write(f"Con {temp_actual} °C y vientos de {vel_viento} km/h, la pluma se desplazará hacia el **{int(angulo_viaje)}°**. Ecosistemas en un radio de **{int(distancia_impacto)} m** en esta dirección recibirán el mayor impacto.")
-
-                st.markdown("#### Plan de Mitigación Propuesto")
-                if contaminante_elegido in ["MP10", "MP2.5"]:
-                    st.markdown("""
-                    1. **Ingeniería:** Activar supresión de polvo y revisar filtros de mangas.
-                    2. **Operacional:** Reducir molienda en un 30% temporalmente.
-                    3. **Logística:** Aumentar frecuencia de camiones aljibe.
-                    """)
-                else:
-                    st.markdown("""
-                    1. **Ingeniería:** Incrementar reactivos alcalinos en desulfuración.
-                    2. **Operacional:** Evaluar mezcla de combustible con menos azufre.
-                    3. **Monitoreo:** Desplegar medición portátil de gases.
-                    """)
-                st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("#### Plan de Mitigación Propuesto")
+            if contaminante_elegido in ["MP10", "MP2.5"]:
+                st.markdown("""
+                1. **Ingeniería:** Activar supresión de polvo y revisar filtros de mangas.
+                2. **Operacional:** Reducir molienda en un 30% temporalmente.
+                3. **Logística:** Aumentar frecuencia de camiones aljibe.
+                """)
+            else:
+                st.markdown("""
+                1. **Ingeniería:** Incrementar reactivos alcalinos en desulfuración.
+                2. **Operacional:** Evaluar mezcla de combustible con menos azufre.
+                3. **Monitoreo:** Desplegar medición portátil de gases.
+                """)
+            st.markdown("</div>", unsafe_allow_html=True)
