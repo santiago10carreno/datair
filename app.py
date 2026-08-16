@@ -22,6 +22,12 @@ st.markdown("""
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
         /* CÓDIGO CSS LIMPIO: La flecha de la barra lateral funcionará de manera 100% natural */
+        
+        /* ANCHO DE LA BARRA LATERAL (Más espacio y elegancia) */
+        [data-testid="stSidebar"] {
+            min-width: 380px !important;
+            max-width: 450px !important;
+        }
 
         /* DISEÑO DE LAS MÉTRICAS */
         div[data-testid="metric-container"] {
@@ -262,27 +268,24 @@ ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 # ==========================================
 # 3. MENÚ DE NAVEGACIÓN PRINCIPAL (BARRA LATERAL)
 # ==========================================
-# Inicializamos la variable de sesión si no existe
 if "modulo_activo" not in st.session_state:
     st.session_state.modulo_activo = "Dashboard"
 
-# Función que cambia el módulo al hacer clic
 def cambiar_modulo(nuevo_modulo):
     st.session_state.modulo_activo = nuevo_modulo
 
 st.sidebar.title("Datair OS")
 st.sidebar.markdown("**Módulos:**")
 
-# CAMBIO: Botones apilados verticalmente (uno debajo del otro)
 st.sidebar.button(
-    "🌍 Dashboard Nacional", 
+    "Dashboard Nacional", 
     type="primary" if st.session_state.modulo_activo == "Dashboard" else "secondary", 
     use_container_width=True, 
     on_click=cambiar_modulo, args=("Dashboard",)
 )
 
 st.sidebar.button(
-    "🤖 Simulador AI", 
+    "Simulador AI", 
     type="primary" if st.session_state.modulo_activo == "Simulador" else "secondary", 
     use_container_width=True, 
     on_click=cambiar_modulo, args=("Simulador",)
@@ -306,7 +309,7 @@ if modulo_activo == "Dashboard":
 
     if fuente_datos == "SINCA (Oficial - Piloto)":
         diccionario_activo = DICCIONARIO_SINCA_PILOTO
-        st.sidebar.success("✅ Conexión Oficial Activa")
+        st.sidebar.success("Conexión Oficial Activa")
         contaminantes_disponibles = ["MP10", "MP2.5", "SO2"]
     else:
         diccionario_activo = DICCIONARIO_ZONAS
@@ -359,12 +362,22 @@ if modulo_activo == "Dashboard":
     with col3: st.metric(label="Sectores en Riesgo (ICAP)", value=f"{estaciones_criticas} de {total_hardware_valido}")
 
     if estaciones_criticas > 0:
-        with st.expander("🚨 Ver detalle de los Sectores en Riesgo actuales"):
+        with st.expander("Ver detalle de los Sectores en Riesgo actuales"):
             df_riesgo = df_mapa[df_mapa["Estado"].isin(["Alerta", "Preemergencia", "Emergencia"])].copy()
             df_riesgo = df_riesgo.sort_values(by="Concentracion", ascending=False).reset_index(drop=True)
             st.dataframe(df_riesgo[["Region", "Comuna", "Estacion", "Concentracion", "Estado"]], use_container_width=True, hide_index=True)
 
     st.divider()
+
+    st.markdown("""
+    <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; font-size: 0.9rem;">
+        <div><span style="color:#00E400;">🟢</span> Bueno</div>
+        <div><span style="color:#FFFF00;">🟡</span> Regular</div>
+        <div><span style="color:#FF7E00;">🟠</span> Alerta</div>
+        <div><span style="color:#FF0000;">🔴</span> Preemergencia</div>
+        <div><span style="color:#8F3F97;">🟣</span> Emergencia</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "Monitoreo Espacial", "Análisis Histórico", "Proyección", "Benchmarking", "Multivariable", "Meteorología y SAT"
@@ -495,10 +508,10 @@ if modulo_activo == "Dashboard":
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 excel_region = generar_excel_universal(df_region_historico, contaminante_elegido, limite_actual, region_elegida, "Region")
-                st.download_button(label=f"📥 Descargar Data Regional", data=excel_region, file_name=f"Auditoria_{region_elegida}.xlsx")
+                st.download_button(label=f"Descargar Data Regional", data=excel_region, file_name=f"Auditoria_{region_elegida}.xlsx")
             with col_btn2:
                 excel_comuna = generar_excel_universal(df_comuna_historico, contaminante_elegido, limite_actual, comuna_elegida, "Comuna")
-                st.download_button(label=f"📥 Descargar Data Comunal", data=excel_comuna, file_name=f"Auditoria_{comuna_elegida}.xlsx")
+                st.download_button(label=f"Descargar Data Comunal", data=excel_comuna, file_name=f"Auditoria_{comuna_elegida}.xlsx")
 
     with tab3:
         st.subheader("Modelos Predictivos Espaciales")
@@ -602,27 +615,27 @@ if modulo_activo == "Dashboard":
                 temp_actual, viento_actual, dir_grados, dir_cardinal = 0, 0, 0, "N/A"
 
             col_k1, col_k2, col_k3 = st.columns(3)
-            with col_k1: st.metric("🌡️ Temperatura", f"{temp_actual:.1f} °C")
-            with col_k2: st.metric("🌬️ Viento", f"{viento_actual:.1f} km/h")
-            with col_k3: st.metric("🧭 Dirección", f"{dir_cardinal} ({dir_grados}°)")
+            with col_k1: st.metric("Temperatura", f"{temp_actual:.1f} °C")
+            with col_k2: st.metric("Viento", f"{viento_actual:.1f} km/h")
+            with col_k3: st.metric("Dirección", f"{dir_cardinal} ({dir_grados}°)")
 
         st.divider()
-        st.markdown("### 📜 Bitácora de Infracciones (Últimas 24h)")
+        st.markdown("### Bitácora de Infracciones (Últimas 24h)")
         alertas_pasadas = [{"Último Peak": serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)][serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)] > limite_actual].index[-1].strftime("%Y-%m-%d %H:00"), "Región": r, "Comuna": c, "Estación": s, "Peak": round(serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)].max(), 1), "Horas Falla": (serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)] > limite_actual).sum()} for r, coms in datos_totales.items() for c, secs in coms.items() for s, serie in secs.items() if not serie.empty and (serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)] > limite_actual).sum() > 0]
         if alertas_pasadas: st.dataframe(pd.DataFrame(alertas_pasadas).sort_values("Último Peak", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True)
-        else: st.success("✅ No hay superaciones en 24h.")
+        else: st.success("No hay superaciones en 24h.")
 
 # ==========================================
 # MÓDULO 2: SIMULADOR CONSULTIVO AI (B2B)
 # ==========================================
 elif modulo_activo == "Simulador":
     
-    st.sidebar.info("💡 **Modo B2B Activo**\n\nTodas las configuraciones operativas han sido movidas a su panel central de trabajo.")
+    st.sidebar.info("**Modo B2B Activo**\n\nTodas las configuraciones operativas han sido movidas a su panel central de trabajo.")
     
     st.title("Datair AI | Simulador de Emisiones e Impacto")
     st.write("Ingrese las coordenadas y la tasa de emisión de su planta a continuación. Nuestro motor cruzará su operación con el clima en tiempo real para generar un **Informe Consultivo Automático**.")
     
-    st.markdown("### ⚙️ Parámetros de Operación de la Planta")
+    st.markdown("### Parámetros de Operación de la Planta")
     
     with st.container():
         col_param1, col_param2, col_param3 = st.columns(3)
@@ -635,7 +648,7 @@ elif modulo_activo == "Simulador":
         with col_param3:
             altura_em = st.number_input("Altura Chimenea (m)", min_value=1.0, value=30.0, step=1.0)
             st.markdown("<br>", unsafe_allow_html=True)
-            btn_simular = st.button("🚀 Ejecutar Simulación AI", type="primary", use_container_width=True)
+            btn_simular = st.button("Ejecutar Simulación AI", type="primary", use_container_width=True)
 
     st.divider()
 
@@ -668,7 +681,7 @@ elif modulo_activo == "Simulador":
             col_mapa, col_reporte = st.columns([1.3, 1])
             
             with col_mapa:
-                st.markdown(f"**🗺️ Mapa de Impacto Proyectado (Viento actual: {vel_viento} km/h hacia el {int(angulo_viaje)}º)**")
+                st.markdown(f"**Mapa de Impacto Proyectado (Viento actual: {vel_viento} km/h hacia el {int(angulo_viaje)}º)**")
                 fig_ai = px.density_mapbox(
                     df_pluma_ai, lat="Latitud", lon="Longitud", z="Concentracion",
                     radius=60, center={"lat": lat_em, "lon": lon_em}, 
@@ -679,7 +692,7 @@ elif modulo_activo == "Simulador":
 
             with col_reporte:
                 st.markdown("<div class='ai-report-box'>", unsafe_allow_html=True)
-                st.markdown("### 🤖 Reporte de Datair AI")
+                st.markdown("### Reporte de Datair AI")
                 
                 if supera_norma:
                     st.error(f"**RIESGO CRÍTICO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, superando el límite legal de {limite_legal} µg/m³ para {contam_em}.")
