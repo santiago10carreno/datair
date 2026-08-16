@@ -20,20 +20,15 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* OCULTAR ELEMENTOS BASURA SIN ROMPER LA BARRA LATERAL */
+        /* OCULTAR ELEMENTOS BASURA (PERO DEJAMOS LA BARRA INTACTA PARA EL BOTÓN NATIVO) */
         #MainMenu {visibility: hidden !important;} 
         footer {visibility: hidden !important;} 
-        header {background-color: transparent !important;} /* Header transparente en vez de borrado */
         
-        /* Ocultar botón Deploy y Toolbar molesto */
-        .stAppDeployButton, [data-testid="stToolbar"] {display: none !important;}
-        
-        /* FORZAR QUE EL BOTÓN DE LA BARRA LATERAL SIEMPRE FUNCIONE */
-        [data-testid="collapsedControl"] {
-            display: flex !important;
-            z-index: 999999 !important;
-            background-color: rgba(26, 28, 30, 0.7) !important;
-            border-radius: 5px !important;
+        /* Ocultamos especificamente como francotirador la línea de colores y botones de la derecha */
+        [data-testid="stDecoration"], 
+        [data-testid="stToolbar"], 
+        .stAppDeployButton {
+            display: none !important;
         }
 
         /* DISEÑO DE CAJAS DE MÉTRICAS */
@@ -691,7 +686,7 @@ with tab5:
         st.plotly_chart(fig_viento, use_container_width=True)
 
 # ------------------------------------------
-# TAB 6: CENTRO DE ALERTAS Y SAT (CON GRÁFICOS PASADOS Y FUTUROS)
+# TAB 6: CENTRO DE ALERTAS Y SAT
 # ------------------------------------------
 with tab6:
     st.subheader("Sala de Control Central")
