@@ -193,10 +193,12 @@ def obtener_datos_estacion_individual(args):
         return (region, comuna, sector, pd.Series(dtype=float))
 
 # Simulador del Conector Oficial SINCA para el Piloto (Genera estructura idéntica para facilitar la posterior ingesta de CSV real)
+# Simulador del Conector Oficial SINCA para el Piloto (Genera estructura idéntica para facilitar la posterior ingesta de CSV real)
 def obtener_datos_sinca_simulados(args):
     lat, lon, variable, region, comuna, sector = args
-    ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None).floor('H')
-    fechas = pd.date_range(start=ahora - pd.Timedelta(days=7), end=ahora + pd.Timedelta(days=3), freq='H')
+    # CAMBIO AQUÍ: 'h' minúscula en vez de 'H' mayúscula
+    ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None).floor('h')
+    fechas = pd.date_range(start=ahora - pd.Timedelta(days=7), end=ahora + pd.Timedelta(days=3), freq='h')
     
     # Patrón base para simular la realidad del SINCA (Ruido y ciclos diarios)
     np.random.seed(hash(sector) % 10000)
@@ -207,7 +209,6 @@ def obtener_datos_sinca_simulados(args):
     
     serie = pd.Series(valores, index=fechas)
     return (region, comuna, sector, serie)
-
 @st.cache_data(ttl=3600)
 def descargar_todos_los_datos(contaminante_nombre, variable_api, fuente):
     lista_tareas = []
