@@ -14,7 +14,6 @@ import concurrent.futures
 # ==========================================
 st.set_page_config(page_title="Datair | Inteligencia Ambiental", layout="wide", initial_sidebar_state="expanded")
 
-# AQUI ESTÁ LA CORRECCIÓN: Se eliminó el bloqueo de tamaño del sidebar
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
@@ -69,7 +68,7 @@ configuracion = {
 # 2. BARRA LATERAL 
 # ==========================================
 st.sidebar.title("Configuracion Global")
-contaminante_elegido = st.sidebar.selectbox("Selecciona el Contaminante", list(configuracion.keys()))
+contaminante_elegido = st.sidebar.selectbox("Selecciona el Contaminante Principal", list(configuracion.keys()))
 
 var_api = configuracion[contaminante_elegido]["api"]
 limite_actual = configuracion[contaminante_elegido]["limite"]
@@ -104,6 +103,21 @@ def descargar_todos_los_datos(variable_api):
                 if comuna not in resultados_completos[region]: resultados_completos[region][comuna] = {}
                 resultados_completos[region][comuna][sector] = serie
     return resultados_completos
+
+@st.cache_data(ttl=3600)
+def obtener_datos_multivariable(lat, lon, variables_api_lista):
+    variables_str = ",".join(variables_api_lista)
+    try:
+        url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&hourly={variables_str}&timezone=America%2FSantiago&past_days=7&forecast_days=3"
+        respuesta = requests.get(url, timeout=5)
+        datos = respuesta.json()
+        fechas = pd.to_datetime(datos['hourly']['time']).tz_localize(None)
+        df_multi = pd.DataFrame(index=fechas)
+        for var in variables_api_lista:
+            df_multi[var] = datos['hourly'][var]
+        return df_multi
+    except:
+        return pd.DataFrame()
 
 datos_totales = descargar_todos_los_datos(var_api)
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
@@ -150,9 +164,37 @@ with col3: st.metric(label="Estaciones Operativas", value=f"{len(df_mapa)} / {TO
 st.divider()
 
 # ==========================================
+# FILTROS GLOBALES PARA PESTAÑAS 1 Y 2
+# ==========================================
+st.subheader("Filtros de Analisis Local")
+col_filtro1, col_filtro2 = st.columns(2)
+with col_filtro1: region_elegida = st.selectbox("Selecciona la Region", list(DICCIONARIO_ZONAS.keys()), index=3)
+with col_filtro2: comuna_elegida = st.selectbox("Selecciona la Comuna", list(DICCIONARIO_ZONAS[region_elegida].keys()))
+
+datos_sectores_comuna = {}
+lista_promedios_comunas = {}
+
+if region_elegida in datos_totales:
+    for comuna, sectores in datos_totales[region_elegida].items():
+        series_comuna = []
+        for sector, serie in sectores.items():
+            series_comuna.append(serie)
+            if comuna == comuna_elegida:
+                datos_sectores_comuna[sector] = serie
+        if series_comuna:
+            lista_promedios_comunas[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
+
+df_region_completo = pd.DataFrame(lista_promedios_comunas).reset_index().rename(columns={'index': 'Fecha y Hora'})
+df_comuna_completo = pd.DataFrame(datos_sectores_comuna).reset_index().rename(columns={'index': 'Fecha y Hora'})
+
+df_region_historico = df_region_completo[df_region_completo['Fecha y Hora'] <= ahora]
+df_comuna_historico = df_comuna_completo[df_comuna_completo['Fecha y Hora'] <= ahora]
+
+st.write("") 
+# ==========================================
 # SISTEMA DE PESTAÑAS (TABS)
 # ==========================================
-tab1, tab2, tab3 = st.tabs(["Monitoreo y Analisis", "Proyeccion a 72 Hrs", "Comparador Cruzado"])
+tab1, tab2, tab3, tab4 = st.tabs(["Monitoreo y Analisis", "Proyeccion a 72 Hrs", "Comparador Cruzado", "Perfil de Estacion (Multivariable)"])
 
 # ------------------------------------------
 # TAB 1: MONITOREO NORMAL Y EXPORTACIÓN
@@ -171,31 +213,6 @@ with tab1:
     
     st.divider()
     
-    st.subheader("Filtros de Analisis Local")
-    col_filtro1, col_filtro2 = st.columns(2)
-    with col_filtro1: region_elegida = st.selectbox("Selecciona la Region", list(DICCIONARIO_ZONAS.keys()), index=3)
-    with col_filtro2: comuna_elegida = st.selectbox("Selecciona la Comuna", list(DICCIONARIO_ZONAS[region_elegida].keys()))
-
-    # Procesamiento de datos locales basado en la seleccion
-    datos_sectores_comuna = {}
-    lista_promedios_comunas = {}
-
-    if region_elegida in datos_totales:
-        for comuna, sectores in datos_totales[region_elegida].items():
-            series_comuna = []
-            for sector, serie in sectores.items():
-                series_comuna.append(serie)
-                if comuna == comuna_elegida:
-                    datos_sectores_comuna[sector] = serie
-            if series_comuna:
-                lista_promedios_comunas[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
-
-    df_region_completo = pd.DataFrame(lista_promedios_comunas).reset_index().rename(columns={'index': 'Fecha y Hora'})
-    df_comuna_completo = pd.DataFrame(datos_sectores_comuna).reset_index().rename(columns={'index': 'Fecha y Hora'})
-
-    df_region_historico = df_region_completo[df_region_completo['Fecha y Hora'] <= ahora]
-    df_comuna_historico = df_comuna_completo[df_comuna_completo['Fecha y Hora'] <= ahora]
-
     st.subheader(f"Analisis Historico Regional: {region_elegida}")
     fig_reg_hist = px.line(df_region_historico, x='Fecha y Hora', y=df_region_historico.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Comuna'})
     fig_reg_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
@@ -387,3 +404,61 @@ with tab3:
             pass
     else:
         st.warning("No hay suficientes datos disponibles para realizar la comparacion.")
+
+# ------------------------------------------
+# TAB 4: PERFIL DE ESTACIÓN (MULTIVARIABLE)
+# ------------------------------------------
+with tab4:
+    st.subheader("Perfil de Estacion (Analisis Multivariable)")
+    st.write("Compara multiples contaminantes simultaneamente en un solo punto geografico (incluye pronostico a 72 hrs).")
+
+    col_p1, col_p2, col_p3 = st.columns(3)
+    with col_p1: reg_p = st.selectbox("Region", list(DICCIONARIO_ZONAS.keys()), index=3, key="reg_p")
+    with col_p2: com_p = st.selectbox("Comuna", list(DICCIONARIO_ZONAS[reg_p].keys()), key="com_p")
+    with col_p3: est_p = st.selectbox("Estacion Especifica", list(DICCIONARIO_ZONAS[reg_p][com_p].keys()), key="est_p")
+
+    contaminantes_seleccionados = st.multiselect(
+        "1. Selecciona los contaminantes a comparar:", 
+        list(configuracion.keys()), 
+        default=["MP2.5", "MP10", "CO"]
+    )
+
+    modo_vista = st.radio(
+        "2. Selecciona el Modo de Visualizacion:", 
+        ["Grafico Unificado (Porcentaje del Limite Legal)", "Graficos Separados (Valores Absolutos)"], 
+        horizontal=True
+    )
+
+    if contaminantes_seleccionados:
+        lat_p, lon_p = DICCIONARIO_ZONAS[reg_p][com_p][est_p]
+        vars_api = [configuracion[c]["api"] for c in contaminantes_seleccionados]
+        
+        df_multi = obtener_datos_multivariable(lat_p, lon_p, vars_api)
+        
+        if not df_multi.empty:
+            diccionario_renombrado = {configuracion[c]["api"]: c for c in contaminantes_seleccionados}
+            df_multi = df_multi.rename(columns=diccionario_renombrado)
+            df_multi = df_multi.reset_index().rename(columns={'index': 'Fecha y Hora'})
+            
+            if "Separados" in modo_vista:
+                df_melt = df_multi.melt(id_vars=['Fecha y Hora'], value_vars=contaminantes_seleccionados, var_name='Contaminante', value_name='Concentracion (µg/m³)')
+                fig_multi = px.line(df_melt, x='Fecha y Hora', y='Concentracion (µg/m³)', facet_row='Contaminante', height=250 * len(contaminantes_seleccionados))
+                fig_multi.update_yaxes(matches=None)
+                fig_multi.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+                fig_multi.add_vrect(x0=ahora, x1=df_multi['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
+                st.plotly_chart(fig_multi, use_container_width=True)
+            else:
+                df_norm = df_multi.copy()
+                for c in contaminantes_seleccionados:
+                    df_norm[c] = (df_norm[c] / configuracion[c]["limite"]) * 100
+                
+                df_melt_norm = df_norm.melt(id_vars=['Fecha y Hora'], value_vars=contaminantes_seleccionados, var_name='Contaminante', value_name='Porcentaje del Limite Legal (%)')
+                fig_norm = px.line(df_melt_norm, x='Fecha y Hora', y='Porcentaje del Limite Legal (%)', color='Contaminante')
+                fig_norm.add_hline(y=100, line_dash="dot", line_color="red", annotation_text="LIMITE LEGAL (100%)")
+                fig_norm.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+                fig_norm.add_vrect(x0=ahora, x1=df_norm['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
+                st.plotly_chart(fig_norm, use_container_width=True)
+        else:
+            st.warning("No se pudieron cargar los datos de esta estacion en este momento.")
+    else:
+        st.info("Selecciona al menos un contaminante para iniciar el analisis.")
