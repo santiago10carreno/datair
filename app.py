@@ -21,12 +21,34 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* OCULTAMOS SOLO LA BASURA, SIN TOCAR EL MECANISMO DE LA BARRA LATERAL */
+        /* 1. DOMAR LA FLECHA DE LA BARRA LATERAL (Solución Definitiva) */
+        /* Congelamos la visibilidad del contenedor principal (Header) */
+        header[data-testid="stHeader"], .stAppHeader {
+            background-color: transparent !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            pointer-events: none !important; /* Deja que los clics pasen a la app */
+            transition: none !important;
+            transform: none !important;
+        }
+        /* Le devolvemos el poder de clic y visibilidad permanente SOLO a la flecha */
+        [data-testid="collapsedControl"] {
+            opacity: 1 !important;
+            visibility: visible !important;
+            pointer-events: auto !important; /* Activa el clic */
+            background-color: #1A1C1E !important;
+            border: 1px solid #3A3F47 !important;
+            border-radius: 6px !important;
+            color: #E2E8F0 !important;
+            z-index: 999999 !important;
+        }
+
+        /* 2. OCULTAMOS SOLO LA BASURA */
         .stAppDeployButton, [data-testid="stToolbar"], [data-testid="stDecoration"] {
             display: none !important;
         }
 
-        /* DISEÑO DE LAS MÉTRICAS */
+        /* 3. DISEÑO DE LAS MÉTRICAS */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -41,7 +63,7 @@ st.markdown("""
             border-left: 4px solid #4A90E2; 
         }
         
-        /* FIX PARA TEXTOS CORTADOS */
+        /* 4. FIX PARA TEXTOS CORTADOS */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
@@ -66,7 +88,7 @@ st.markdown("""
             border: 1px solid #3A3F47;
             border-radius: 8px;
             padding: 25px;
-            margin-top: 15px;
+            height: 100%;
             border-top: 4px solid #8F3F97; 
         }
     </style>
@@ -266,7 +288,9 @@ ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 # 3. MENÚ DE NAVEGACIÓN PRINCIPAL (BARRA LATERAL)
 # ==========================================
 st.sidebar.title("Datair OS")
-modulo_activo = st.sidebar.radio(
+
+# CAMBIO: Usamos un selectbox (desplegable) en lugar de radio buttons (círculos)
+modulo_activo = st.sidebar.selectbox(
     "Navegación de Módulos:",
     ["🌍 Dashboard de Monitoreo", "🤖 Simulador Consultivo (AI)"]
 )
@@ -278,7 +302,9 @@ st.sidebar.divider()
 if modulo_activo == "🌍 Dashboard de Monitoreo":
     
     st.sidebar.subheader("Configuración de Red")
-    fuente_datos = st.sidebar.radio(
+    
+    # CAMBIO: Usamos selectbox también aquí para eliminar círculos
+    fuente_datos = st.sidebar.selectbox(
         "Fuente de Extracción:",
         ["Open-Meteo (Modelo Global)", "SINCA (Oficial - Piloto)"]
     )
@@ -345,7 +371,6 @@ if modulo_activo == "🌍 Dashboard de Monitoreo":
 
     st.divider()
 
-    # Pestañas del Dashboard (Ahora son 6, eliminamos la del Simulador)
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "Monitoreo Espacial", "Análisis Histórico", "Proyección", "Benchmarking", "Multivariable", "Meteorología y SAT"
     ])
@@ -433,13 +458,52 @@ if modulo_activo == "🌍 Dashboard de Monitoreo":
 
             st.subheader(f"Histórico Regional: {region_elegida}")
             fig_reg_hist = px.line(df_region_historico, x='Fecha y Hora', y=df_region_historico.columns[1:], labels={'value': 'Concentración (µg/m³)', 'variable': 'Comuna'})
-            fig_reg_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Límite Legal")
+            fig_reg_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red")
             st.plotly_chart(fig_reg_hist, use_container_width=True)
 
             st.subheader(f"Histórico Comunal: {comuna_elegida}")
             fig_com_hist = px.line(df_comuna_historico, x='Fecha y Hora', y=df_comuna_historico.columns[1:], labels={'value': 'Concentración (µg/m³)', 'variable': 'Estación'})
-            fig_com_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Límite Legal")
+            fig_com_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red")
             st.plotly_chart(fig_com_hist, use_container_width=True)
+            
+            st.divider()
+            st.subheader("Generación de Reportes de Cumplimiento")
+            
+            def generar_excel_universal(df_datos, contaminante, limite, nombre_zona, tipo_zona):
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_datos.to_excel(writer, sheet_name='Base_Datos', index=False, startrow=3)
+                    ws_resumen = writer.book.create_sheet('Dashboard_Ejecutivo', 0)
+                    ws_datos = writer.sheets['Base_Datos']
+                    
+                    ws_datos['A1'] = f"REGISTRO CONTINUO - {contaminante} ({nombre_zona})"
+                    ws_datos['A1'].font = Font(size=12, bold=True)
+                    ws_datos['A2'] = f"Limite Normativo: {limite} µg/m³"
+                    
+                    header_fill, header_font = PatternFill(start_color="2F75B5", fill_type="solid"), Font(bold=True, color="FFFFFF")
+                    for col_idx, _ in enumerate(df_datos.columns, start=1):
+                        col_letter = openpyxl.utils.get_column_letter(col_idx)
+                        ws_datos[f'{col_letter}4'].fill = header_fill
+                        ws_datos[f'{col_letter}4'].font = header_font
+                        ws_datos.column_dimensions[col_letter].width = 22
+                        
+                    red_fill, red_font = PatternFill(start_color="FFC7CE", fill_type="solid"), Font(color="9C0006", bold=True)
+                    green_fill, green_font = PatternFill(start_color="C6EFCE", fill_type="solid"), Font(color="006100")
+                    rule_over = CellIsRule(operator='greaterThan', formula=[str(limite)], stopIfTrue=True, fill=red_fill, font=red_font)
+                    rule_under = CellIsRule(operator='lessThanOrEqual', formula=[str(limite)], stopIfTrue=True, fill=green_fill, font=green_font)
+                    
+                    ultima_letra = openpyxl.utils.get_column_letter(len(df_datos.columns))
+                    ws_datos.conditional_formatting.add(f'B5:{ultima_letra}{len(df_datos)+4}', rule_over)
+                    ws_datos.conditional_formatting.add(f'B5:{ultima_letra}{len(df_datos)+4}', rule_under)
+                return output.getvalue()
+
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                excel_region = generar_excel_universal(df_region_historico, contaminante_elegido, limite_actual, region_elegida, "Region")
+                st.download_button(label=f"📥 Descargar Data Regional", data=excel_region, file_name=f"Auditoria_{region_elegida}.xlsx")
+            with col_btn2:
+                excel_comuna = generar_excel_universal(df_comuna_historico, contaminante_elegido, limite_actual, comuna_elegida, "Comuna")
+                st.download_button(label=f"📥 Descargar Data Comunal", data=excel_comuna, file_name=f"Auditoria_{comuna_elegida}.xlsx")
 
     with tab3:
         st.subheader("Modelos Predictivos Espaciales")
@@ -459,18 +523,18 @@ if modulo_activo == "🌍 Dashboard de Monitoreo":
             df_region_proy = pd.DataFrame(lista_promedios_proy).reset_index().rename(columns={'index': 'Fecha y Hora'})
             df_comuna_proy = pd.DataFrame(datos_sectores_proy).reset_index().rename(columns={'index': 'Fecha y Hora'})
 
-            fig_region_pred = px.line(df_region_proy, x='Fecha y Hora', y=df_region_proy.columns[1:], labels={'value': 'Concentración (µg/m³)'})
+            fig_region_pred = px.line(df_region_proy, x='Fecha y Hora', y=df_region_proy.columns[1:], labels={'value': 'Concentración'})
             fig_region_pred.add_hline(y=limite_actual, line_dash="dot", line_color="red")
             fig_region_pred.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white")
             st.plotly_chart(fig_region_pred, use_container_width=True)
 
-            fig_comuna_pred = px.line(df_comuna_proy, x='Fecha y Hora', y=df_comuna_proy.columns[1:], labels={'value': 'Concentración (µg/m³)'})
+            fig_comuna_pred = px.line(df_comuna_proy, x='Fecha y Hora', y=df_comuna_proy.columns[1:], labels={'value': 'Concentración'})
             fig_comuna_pred.add_hline(y=limite_actual, line_dash="dot", line_color="red")
             fig_comuna_pred.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white")
             st.plotly_chart(fig_comuna_pred, use_container_width=True)
 
     with tab4:
-        st.subheader("Benchmarking Corporativo (Comparador Cruzado)")
+        st.subheader("Benchmarking Corporativo")
         if len(datos_totales) > 0:
             col_vs1, col_vs2 = st.columns(2)
             with col_vs1:
@@ -488,20 +552,20 @@ if modulo_activo == "🌍 Dashboard de Monitoreo":
 
             if not promedio_a.empty and not promedio_b.empty:
                 df_vs = pd.DataFrame({com_a: promedio_a, com_b: promedio_b}).reset_index().rename(columns={'index': 'Fecha y Hora'})
-                fig_vs = px.line(df_vs, x='Fecha y Hora', y=[com_a, com_b], labels={'value': 'Concentración (µg/m³)'})
+                fig_vs = px.line(df_vs, x='Fecha y Hora', y=[com_a, com_b], labels={'value': 'Concentración'})
                 fig_vs.add_hline(y=limite_actual, line_dash="dot", line_color="red")
                 st.plotly_chart(fig_vs, use_container_width=True)
 
     with tab5:
-        st.subheader("Perfil de Estación (Análisis Multivariable)")
+        st.subheader("Perfil de Estación (Multivariable)")
         col_p1, col_p2, col_p3 = st.columns(3)
         with col_p1: reg_p = st.selectbox("Región", list(diccionario_activo.keys()), key="reg_p_multi")
         with col_p2: com_p = st.selectbox("Comuna", list(diccionario_activo[reg_p].keys()), key="com_p_multi")
         with col_p3: est_p = st.selectbox("Estación", list(diccionario_activo[reg_p][com_p].keys()), key="est_p_multi")
 
         sensores_certificados = obtener_sensores_certificados(est_p)
-        contaminantes_seleccionados = st.multiselect("Contaminantes a comparar:", sensores_certificados, default=[s for s in ["MP2.5", "MP10"] if s in sensores_certificados])
-        modo_vista = st.radio("Visualización:", ["Gráfico Unificado", "Gráficos Separados"], horizontal=True)
+        contaminantes_seleccionados = st.multiselect("Contaminantes:", sensores_certificados, default=[s for s in ["MP2.5", "MP10"] if s in sensores_certificados])
+        modo_vista = st.selectbox("Visualización:", ["Gráfico Unificado (Porcentaje)", "Gráficos Separados (Absoluto)"])
 
         if contaminantes_seleccionados:
             lat_p, lon_p = diccionario_activo[reg_p][com_p][est_p]
@@ -558,26 +622,34 @@ if modulo_activo == "🌍 Dashboard de Monitoreo":
 # ==========================================
 elif modulo_activo == "🤖 Simulador Consultivo (AI)":
     
-    st.sidebar.subheader("⚙️ Parámetros de Operación")
-    lat_em = st.sidebar.number_input("Latitud de Descarga", value=-34.1708, format="%.4f")
-    lon_em = st.sidebar.number_input("Longitud de Descarga", value=-70.7441, format="%.4f")
-    contam_em = st.sidebar.selectbox("Contaminante", ["MP10", "MP2.5", "SO2"])
-    tasa_em = st.sidebar.number_input("Emisión (kg/h)", min_value=0.1, value=50.0, step=1.0)
-    altura_em = st.sidebar.number_input("Altura Chimenea (m)", min_value=1.0, value=30.0, step=1.0)
+    st.sidebar.info("💡 **Modo B2B Activo**\n\nTodas las configuraciones operativas han sido movidas a su panel central de trabajo.")
     
-    st.sidebar.markdown("<br>", unsafe_allow_html=True)
-    btn_simular = st.sidebar.button("🚀 Ejecutar Simulación AI", type="primary", use_container_width=True)
-
     st.title("Datair AI | Simulador de Emisiones e Impacto")
-    st.write("Ingrese las coordenadas y la tasa de emisión de su planta en la barra lateral. Nuestro motor matemático cruzará su operación con el clima en tiempo real para generar un **Informe Consultivo Automático**.")
+    st.write("Ingrese las coordenadas y la tasa de emisión de su planta a continuación. Nuestro motor cruzará su operación con el clima en tiempo real para generar un **Informe Consultivo Automático**.")
+    
+    st.markdown("### ⚙️ Parámetros de Operación de la Planta")
+    
+    # CAMBIO: Panel de configuración en el centro dividido en 3 columnas perfectas
+    with st.container():
+        col_param1, col_param2, col_param3 = st.columns(3)
+        with col_param1:
+            lat_em = st.number_input("Latitud de Descarga", value=-34.1708, format="%.4f")
+            lon_em = st.number_input("Longitud de Descarga", value=-70.7441, format="%.4f")
+        with col_param2:
+            contam_em = st.selectbox("Contaminante", ["MP10", "MP2.5", "SO2"])
+            tasa_em = st.number_input("Emisión (kg/h)", min_value=0.1, value=50.0, step=1.0)
+        with col_param3:
+            altura_em = st.number_input("Altura Chimenea (m)", min_value=1.0, value=30.0, step=1.0)
+            st.markdown("<br>", unsafe_allow_html=True)
+            btn_simular = st.button("🚀 Ejecutar Simulación AI", type="primary", use_container_width=True)
+
+    st.divider()
 
     if btn_simular:
         with st.spinner("Conectando con satélites meteorológicos y redactando informe..."):
             
-            # Obtener clima real
+            # Motor Matemático y Meteorología
             vel_viento, dir_viento, temp_actual = consultar_clima_coordenada(lat_em, lon_em)
-            
-            # Motor Matemático (Pluma Gaussiana)
             angulo_viaje = (dir_viento + 180) % 360
             angulo_rad = math.radians(90 - angulo_viaje)
             
@@ -586,8 +658,7 @@ elif modulo_activo == "🤖 Simulador Consultivo (AI)":
             concentracion_max = (tasa_em * 1000) / (factor_dispersion * altura_em)
             
             puntos_pluma = [{"Latitud": lat_em, "Longitud": lon_em, "Concentracion": concentracion_max}]
-            pasos = 15
-            dist_max = vel_viento * 0.02 
+            pasos, dist_max = 15, vel_viento * 0.02 
             
             for i in range(1, pasos + 1):
                 frac = i / pasos
@@ -598,46 +669,45 @@ elif modulo_activo == "🤖 Simulador Consultivo (AI)":
                 puntos_pluma.append({"Latitud": lat_em + d_lat, "Longitud": lon_em + d_lon, "Concentracion": c_fantasma})
 
             df_pluma_ai = pd.DataFrame(puntos_pluma)
-            
-            # Mapa a pantalla completa (Mucho más elegante)
-            st.markdown(f"**🗺️ Mapa de Impacto Proyectado (Viento actual: {vel_viento} km/h hacia el {int(angulo_viaje)}º)**")
-            fig_ai = px.density_mapbox(
-                df_pluma_ai, lat="Latitud", lon="Longitud", z="Concentracion",
-                radius=60, center={"lat": lat_em, "lon": lon_em}, 
-                zoom=12, mapbox_style="carto-darkmatter", color_continuous_scale="Reds", 
-                opacity=0.7
-            )
-            fig_ai.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=450)
-            st.plotly_chart(fig_ai, use_container_width=True)
-
-            # Generación Dinámica del Texto
             limite_legal = configuracion[contam_em]["limite"]
             supera_norma = concentracion_max > limite_legal
             
-            st.markdown("<div class='ai-report-box'>", unsafe_allow_html=True)
-            st.markdown("### 🤖 Reporte Generado por Datair AI")
+            # CAMBIO: Mostramos los resultados en columnas grandes, a la izquierda el mapa, a la derecha el informe
+            col_mapa, col_reporte = st.columns([1.3, 1])
             
-            if supera_norma:
-                st.error(f"**VEREDICTO DE RIESGO: CRÍTICO.** La concentración estimada a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, lo cual supera el límite legal de {limite_legal} µg/m³ para {contam_em}.")
-            else:
-                st.success(f"**VEREDICTO DE RIESGO: BAJO.** La concentración estimada a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, manteniéndose bajo el límite legal de {limite_legal} µg/m³ para {contam_em}.")
+            with col_mapa:
+                st.markdown(f"**🗺️ Mapa de Impacto Proyectado (Viento actual: {vel_viento} km/h hacia el {int(angulo_viaje)}º)**")
+                fig_ai = px.density_mapbox(
+                    df_pluma_ai, lat="Latitud", lon="Longitud", z="Concentracion",
+                    radius=60, center={"lat": lat_em, "lon": lon_em}, 
+                    zoom=12, mapbox_style="carto-darkmatter", color_continuous_scale="Reds", opacity=0.7
+                )
+                fig_ai.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
+                st.plotly_chart(fig_ai, use_container_width=True)
 
-            st.markdown("#### Análisis de Impacto Comunitario")
-            st.write(f"Dadas las condiciones meteorológicas actuales ({temp_actual} °C y vientos de {vel_viento} km/h), la pluma de contaminación de **{contam_em}** se desplazará hacia el **{int(angulo_viaje)}°**. Las áreas pobladas o ecosistemas ubicados a un radio de **{int(distancia_impacto)} metros** en esta dirección recibirán el mayor impacto.")
+            with col_reporte:
+                st.markdown("<div class='ai-report-box'>", unsafe_allow_html=True)
+                st.markdown("### 🤖 Reporte de Datair AI")
+                
+                if supera_norma:
+                    st.error(f"**RIESGO CRÍTICO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, superando el límite legal de {limite_legal} µg/m³ para {contam_em}.")
+                else:
+                    st.success(f"**RIESGO BAJO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, manteniéndose bajo el límite legal de {limite_legal} µg/m³ para {contam_em}.")
 
-            st.markdown("#### Plan de Mitigación Inmediato")
-            if contam_em in ["MP10", "MP2.5"]:
-                st.markdown("""
-                1. **Ingeniería:** Activar de inmediato los sistemas de supresión de polvo y verificar el diferencial de presión en los filtros de mangas.
-                2. **Operacional:** Reducir la tasa de molienda en un 30% hasta que mejore la ventilación atmosférica.
-                3. **Logística:** Aumentar la frecuencia de los camiones aljibe para humectación.
-                """)
-            else:
-                st.markdown("""
-                1. **Ingeniería:** Incrementar la inyección de reactivos alcalinos en el sistema de desulfuración.
-                2. **Operacional:** Evaluar el cambio temporal a una mezcla de combustible con menor porcentaje de azufre durante las próximas 12 horas.
-                3. **Monitoreo:** Desplegar una brigada portátil de medición de gases en el perímetro proyectado.
-                """)
-            st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        st.info("👈 Los parámetros de su chimenea industrial se encuentran en la barra lateral. Ajuste los valores y presione Ejecutar.")
+                st.markdown("#### Impacto Comunitario")
+                st.write(f"Con {temp_actual} °C y vientos de {vel_viento} km/h, la pluma se desplazará hacia el **{int(angulo_viaje)}°**. Ecosistemas en un radio de **{int(distancia_impacto)} m** en esta dirección recibirán el mayor impacto.")
+
+                st.markdown("#### Plan de Mitigación Propuesto")
+                if contam_em in ["MP10", "MP2.5"]:
+                    st.markdown("""
+                    1. **Ingeniería:** Activar supresión de polvo y revisar filtros de mangas.
+                    2. **Operacional:** Reducir molienda en un 30% temporalmente.
+                    3. **Logística:** Aumentar frecuencia de camiones aljibe.
+                    """)
+                else:
+                    st.markdown("""
+                    1. **Ingeniería:** Incrementar reactivos alcalinos en desulfuración.
+                    2. **Operacional:** Evaluar mezcla de combustible con menos azufre.
+                    3. **Monitoreo:** Desplegar medición portátil de gases.
+                    """)
+                st.markdown("</div>", unsafe_allow_html=True)
