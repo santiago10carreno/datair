@@ -9,7 +9,6 @@ from openpyxl.formatting.rule import CellIsRule
 from openpyxl.chart import LineChart, Reference
 import concurrent.futures
 import math
-import numpy as np
 
 # ==========================================
 # CONFIGURACIÓN Y ESTILOS CORPORATIVOS
@@ -236,7 +235,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 ])
 
 # ------------------------------------------
-# TAB 1 A 5 (Código estándar)
+# TAB 1 A 5 
 # ------------------------------------------
 with tab1:
     st.subheader("Mapa Geografico en Tiempo Real")
@@ -433,121 +432,83 @@ with tab5:
         st.plotly_chart(fig_viento, use_container_width=True)
 
 # ------------------------------------------
-# TAB 6: MALLA DE DISPERSIÓN (IDW ADVECTIVO)
+# TAB 6: MAPA DE DISPERSIÓN ORGÁNICA (CORREGIDO)
 # ------------------------------------------
 with tab6:
-    st.subheader("Modelo Avanzado de Dispersion (Malla Advectiva Continua)")
-    st.write("Resolucion de matriz espacial 2D. Cruza los datos de multiples estaciones y aplica ecuaciones de adveccion para difuminar la pluma suavemente a kilometros de distancia, manteniendo la escala real sin importar el zoom de la camara.")
+    st.subheader("Modelo de Dispersion Espacial Organico")
+    st.write("Fusión térmica de datos. Las manchas de contaminación se extienden con el viento y se mezclan naturalmente entre estaciones cercanas mediante difuminado de alto radio.")
+    
+    # Nota de usabilidad para el usuario:
+    st.caption("ℹ️ *Nota:* Este mapa utiliza tecnología térmica de pantalla. Funciona mejor al mantener una vista regional completa para ver la mezcla de estaciones.")
     
     if not df_mapa.empty:
         df_vectores = obtener_viento_batch(df_mapa.copy())
         
+        puntos_pluma = []
+        for _, row in df_vectores.iterrows():
+            lat = row['Latitud']
+            lon = row['Longitud']
+            c = row['Concentracion']
+            spd = row.get('WindSpd', 0)
+            dir_viento = row.get('WindDir', 0)
+            
+            # Punto central original
+            puntos_pluma.append(row.to_dict())
+            
+            # Generar "línea espinal" en dirección del viento si este es significativo
+            if spd > 1:
+                angulo_viaje = (dir_viento + 180) % 360
+                angulo_rad = math.radians(90 - angulo_viaje)
+                
+                pasos = 8
+                # La pluma llega más lejos según la velocidad del viento
+                dist_max = spd * 0.015 
+                
+                for i in range(1, pasos + 1):
+                    frac = i / pasos
+                    dist = dist_max * frac
+                    
+                    d_lat = dist * math.sin(angulo_rad)
+                    d_lon = dist * math.cos(angulo_rad) / math.cos(math.radians(lat))
+                    
+                    # Decaimiento suave para mantener la mancha unida y con peso en la cola
+                    c_fantasma = c * (1 - frac)**1.5 
+                    
+                    if c_fantasma > (limite_actual * 0.05):
+                        nuevo_punto = row.to_dict()
+                        nuevo_punto['Latitud'] = lat + d_lat
+                        nuevo_punto['Longitud'] = lon + d_lon
+                        nuevo_punto['Concentracion'] = c_fantasma
+                        nuevo_punto['Estacion'] = f"Viento desde {row['Estacion']}"
+                        puntos_pluma.append(nuevo_punto)
+        
+        df_pluma = pd.DataFrame(puntos_pluma)
+
         regiones_disp = list(df_vectores['Region'].unique())
-        reg_mapa = st.selectbox("Analizar dispersion en la Región:", regiones_disp, index=0 if "Región Metropolitana" not in regiones_disp else regiones_disp.index("Región Metropolitana"))
+        reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, index=0 if "Región Metropolitana" not in regiones_disp else regiones_disp.index("Región Metropolitana"))
         
         df_region_mapa = df_vectores[df_vectores['Region'] == reg_mapa]
-        
         if not df_region_mapa.empty:
-            lats = df_region_mapa['Latitud'].values
-            lons = df_region_mapa['Longitud'].values
-            vals = df_region_mapa['Concentracion'].values
-            spds = df_region_mapa['WindSpd'].values
-            dirs = df_region_mapa['WindDir'].values
-            
-            # 1. Definir los limites fisicos de la Malla (Grid) ampliando ~30km extra
-            lat_min, lat_max = lats.min() - 0.35, lats.max() + 0.35
-            lon_min, lon_max = lons.min() - 0.40, lons.max() + 0.40
-            
-            # Si hay solo una estacion, el min y max seran iguales, agregamos padding manual
-            if lat_min == lat_max:
-                lat_min -= 0.35; lat_max += 0.35
-                lon_min -= 0.40; lon_max += 0.40
-            
-            # Creamos una malla ultra densa de 2000 puntos para difuminado perfecto
-            grid_lats = np.linspace(lat_min, lat_max, 45)
-            grid_lons = np.linspace(lon_min, lon_max, 45)
-            
-            puntos_pluma = []
-            
-            # W_bg (Background Weight): Determina cuan lejos llega el gas. 0.25 grados son ~28 km reales.
-            W_bg = 1.0 / (0.25**2) 
-            
-            # 2. Motor Matematico de Ponderacion Inversa a la Distancia (IDW)
-            for glat in grid_lats:
-                for glon in grid_lons:
-                    sum_w = 0
-                    sum_cw = 0
-                    
-                    for i in range(len(lats)):
-                        lat_i = lats[i]
-                        lon_i = lons[i]
-                        c_i = vals[i]
-                        spd_i = spds[i]
-                        dir_i = dirs[i]
-                        
-                        dx = (glon - lon_i) * math.cos(math.radians(lat_i))
-                        dy = glat - lat_i
-                        
-                        # Direccion hacia donde viaja el gas (+180 grados del origen del viento)
-                        alpha_math = math.radians(270 - dir_i)
-                        
-                        # Rotar el eje de coordenadas para alinear con el viento
-                        x_rot = dx * math.cos(alpha_math) + dy * math.sin(alpha_math)
-                        y_rot = -dx * math.sin(alpha_math) + dy * math.cos(alpha_math)
-                        
-                        # Factor de adveccion (Estiramiento geografico)
-                        c_wind = 0.08
-                        if x_rot > 0: # El viento empuja hacia aca (Downwind)
-                            x_eff = x_rot / (1 + c_wind * spd_i)
-                            y_eff = y_rot * (1 + c_wind * spd_i * 0.5)
-                        else: # En contra del viento (Upwind, se aplasta)
-                            x_eff = x_rot * (1 + c_wind * spd_i * 2)
-                            y_eff = y_rot * (1 + c_wind * spd_i * 0.5)
-                            
-                        d_eff_sq = x_eff**2 + y_eff**2
-                        
-                        # Peso de esta estacion especifica sobre este punto del mapa
-                        w_i = 1.0 / (d_eff_sq + 1e-5) 
-                        
-                        sum_w += w_i
-                        sum_cw += c_i * w_i
-                        
-                    # Concentracion matematica final mezclando TODAS las estaciones de la region
-                    c_grid = sum_cw / (sum_w + W_bg)
-                    
-                    if c_grid > (limite_actual * 0.05):
-                        puntos_pluma.append({
-                            'Latitud': glat, 
-                            'Longitud': glon, 
-                            'Concentracion': c_grid,
-                            'Estacion': 'Malla Matriz'
-                        })
-            
-            # Anclamos los nucleos fisicos reales
-            for _, row in df_region_mapa.iterrows():
-                puntos_pluma.append(row.to_dict())
-                
-            df_pluma = pd.DataFrame(puntos_pluma)
-            
-            # 3. Renderizado del Mapa Base
-            fig_heat = px.density_mapbox(
-                df_pluma, 
-                lat="Latitud", 
-                lon="Longitud", 
-                z="Concentracion",
-                radius=30, # Aumentado para generar una fusion total y eliminar los puntos discretos
-                center={"lat": lats.mean(), "lon": lons.mean()}, 
-                zoom=8,
-                mapbox_style="carto-darkmatter", 
-                color_continuous_scale="Inferno", 
-                opacity=0.6, 
-                hover_name="Estacion",
-                title=f"Dispersión Advectiva de {contaminante_elegido} - {reg_mapa}"
-            )
-            fig_heat.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
-            st.plotly_chart(fig_heat, use_container_width=True)
-            
+            lat_centro = df_region_mapa['Latitud'].mean()
+            lon_centro = df_region_mapa['Longitud'].mean()
         else:
-            st.warning(f"No hay estaciones de {contaminante_elegido} activas en esta region para modelar.")
+            lat_centro, lon_centro = -35.0, -71.0
+
+        # EL SECRETO ESTÁ EN EL RADIO ALTO: Fuerza a que todo se vea suave y difuminado, sin cuadrados.
+        fig_heat = px.density_mapbox(
+            df_pluma, 
+            lat="Latitud", 
+            lon="Longitud", 
+            z="Concentracion",
+            radius=60, # <--- RADIO DE FUSIÓN MÁXIMA
+            center={"lat": lat_centro, "lon": lon_centro}, 
+            zoom=9,
+            mapbox_style="carto-darkmatter", 
+            color_continuous_scale="Inferno", 
+            opacity=0.6, 
+            hover_name="Estacion"
+        )
+        fig_heat.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
+        st.plotly_chart(fig_heat, use_container_width=True)
     else:
         st.warning(f"No hay suficientes datos de hardware para modelar la dispersion de {contaminante_elegido}.")
