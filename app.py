@@ -20,44 +20,12 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* 1. LA OPCIÓN NUCLEAR: Congelar la caja maestra del Header para siempre */
-        .stApp > header, header[data-testid="stHeader"] {
-            background-color: transparent !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            pointer-events: none !important; /* Que el mouse lo traspase */
-        }
-        
-        /* 2. ARRANCAR EL BOTÓN Y PEGARLO A LA PANTALLA (Inmune a la invisibilidad) */
-        [data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] {
-            position: fixed !important;
-            top: 15px !important;
-            left: 15px !important;
-            z-index: 999999 !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            display: flex !important;
-            pointer-events: auto !important; /* Le devolvemos el poder del clic */
-            background-color: #1A1C1E !important;
-            border: 1px solid #2D3139 !important;
-            border-radius: 8px !important;
-            padding: 3px !important;
-            color: #E2E8F0 !important;
-            transition: none !important;
-            transform: none !important;
-        }
-
-        /* 3. BORRAR LA BASURA RESTANTE */
-        [data-testid="stToolbar"], 
-        [data-testid="stDecoration"], 
-        .stAppDeployButton, 
-        #MainMenu, 
-        footer {
+        /* 1. OCULTAMOS SOLO LA BASURA, SIN TOCAR EL MECANISMO DE LA BARRA LATERAL */
+        .stAppDeployButton, [data-testid="stToolbar"], [data-testid="stDecoration"] {
             display: none !important;
-            visibility: hidden !important;
         }
 
-        /* 4. DISEÑO DE LAS MÉTRICAS */
+        /* 2. DISEÑO DE LAS MÉTRICAS (Alineación perfecta) */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -71,6 +39,7 @@ st.markdown("""
             width: 100% !important;
         }
         
+        /* 3. FIX PARA TEXTOS CORTADOS */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
