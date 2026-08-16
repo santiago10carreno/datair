@@ -20,18 +20,27 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* 1. EL TRUCO DEFINITIVO: Barra superior de cristal (transparente) en lugar de borrada */
+        /* 1. EL ANTI-FANTASMA: Bloquear el JS de Streamlit que desvanece el header */
         header[data-testid="stHeader"] {
             background-color: transparent !important;
+            opacity: 1 !important; /* 🛑 FUERZA LA VISIBILIDAD, BLOQUEA EL OPACITY: 0 */
+            transform: translateY(0px) !important; /* 🛑 EVITA QUE SE DESLICE HACIA ARRIBA */
         }
         
-        /* 2. Borrado quirúrgico: Solo eliminamos los menús de la derecha y la línea de colores */
-        [data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer {
+        /* 2. Borrado quirúrgico: Adiós línea de colores y botones de la derecha */
+        [data-testid="stDecoration"], [data-testid="stToolbar"], #MainMenu, footer, .stAppDeployButton {
             display: none !important;
         }
 
-        /* 3. Asegurar que el botón de la flecha siga en su lugar y sea clickeable */
+        /* 3. Darle cuerpo y color al botón de la flecha para que no se pierda */
         [data-testid="collapsedControl"] {
+            display: flex !important;
+            visibility: visible !important;
+            background-color: rgba(26, 28, 30, 0.9) !important;
+            border: 1px solid #2D3139 !important;
+            border-radius: 6px !important;
+            margin-top: 10px !important;
+            margin-left: 10px !important;
             z-index: 999999 !important;
         }
 
