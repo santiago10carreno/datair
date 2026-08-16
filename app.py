@@ -8,7 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.chart import LineChart, Reference
 import concurrent.futures
-#lacabra
+
 # ==========================================
 # CONFIGURACIÓN Y ESTILOS CORPORATIVOS
 # ==========================================
@@ -21,10 +21,9 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         
-        /* NUEVO: Hacer la barra lateral más angosta */
         section[data-testid="stSidebar"] {
-            width: 200px !important;
-            min-width: 200px !important;
+            width: 260px !important;
+            min-width: 260px !important;
         }
         
         div[data-testid="metric-container"] {
@@ -70,7 +69,7 @@ configuracion = {
 # ==========================================
 # 2. BARRA LATERAL (PORTAL DE CLIENTE)
 # ==========================================
-st.sidebar.title("🏢 Portal de Empresa")
+st.sidebar.title("Portal de Empresa")
 cliente_activo = st.sidebar.selectbox("Sesion iniciada como:", [
     "Demo Publica", 
     "Agroindustria Valle Central", 
@@ -80,7 +79,7 @@ cliente_activo = st.sidebar.selectbox("Sesion iniciada como:", [
 
 st.sidebar.divider()
 
-st.sidebar.title("⚙️ Configuracion Global")
+st.sidebar.title("Configuracion Global")
 contaminante_elegido = st.sidebar.selectbox("Selecciona el Contaminante", list(configuracion.keys()))
 var_api = configuracion[contaminante_elegido]["api"]
 limite_actual = configuracion[contaminante_elegido]["limite"]
@@ -221,7 +220,64 @@ st.plotly_chart(fig_comuna, use_container_width=True)
 
 st.divider()
 
-# --- SECCIÓN 3: EXPORTACIÓN ---
+# --- SECCIÓN 3: COMPARADOR CRUZADO (NUEVO) ---
+st.subheader("Benchmarking Corporativo (Comparador Cruzado)")
+st.write("Analiza y compara el comportamiento de contaminacion entre dos zonas de operacion distintas.")
+
+col_vs1, col_vs2 = st.columns(2)
+with col_vs1:
+    st.markdown("**Zona de Operacion A**")
+    reg_a = st.selectbox("Region A", list(DICCIONARIO_ZONAS.keys()), index=2, key="reg_a")
+    com_a = st.selectbox("Comuna A", list(DICCIONARIO_ZONAS[reg_a].keys()), key="com_a")
+
+with col_vs2:
+    st.markdown("**Zona de Operacion B**")
+    reg_b = st.selectbox("Region B", list(DICCIONARIO_ZONAS.keys()), index=6, key="reg_b")
+    com_b = st.selectbox("Comuna B", list(DICCIONARIO_ZONAS[reg_b].keys()), key="com_b")
+
+def obtener_promedio_comuna(region, comuna):
+    series = []
+    if region in datos_totales and comuna in datos_totales[region]:
+        for sector, serie in datos_totales[region][comuna].items():
+            if not serie.empty:
+                series.append(serie)
+    if series:
+        return pd.concat(series, axis=1).mean(axis=1)
+    return pd.Series(dtype=float)
+
+promedio_a = obtener_promedio_comuna(reg_a, com_a)
+promedio_b = obtener_promedio_comuna(reg_b, com_b)
+
+if not promedio_a.empty and not promedio_b.empty:
+    df_vs = pd.DataFrame({com_a: promedio_a, com_b: promedio_b}).reset_index().rename(columns={'index': 'Fecha y Hora'})
+    
+    fig_vs = px.line(df_vs, x='Fecha y Hora', y=[com_a, com_b], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Comuna Analizada'})
+    fig_vs.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
+    fig_vs.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+    fig_vs.add_vrect(x0=ahora, x1=df_vs['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
+    
+    st.plotly_chart(fig_vs, use_container_width=True)
+    
+    # Calculo de diferencia actual
+    try:
+        val_a = df_vs[com_a][df_vs['Fecha y Hora'] <= ahora].iloc[-1]
+        val_b = df_vs[com_b][df_vs['Fecha y Hora'] <= ahora].iloc[-1]
+        diff = val_a - val_b
+        
+        if diff > 0:
+            st.info(f"Insight Operativo: Actualmente, {com_a} presenta {diff:.1f} µg/m³ MAS de concentracion de {contaminante_elegido} que {com_b}.")
+        elif diff < 0:
+            st.info(f"Insight Operativo: Actualmente, {com_a} presenta {abs(diff):.1f} µg/m³ MENOS de concentracion de {contaminante_elegido} que {com_b}.")
+        else:
+            st.info("Insight Operativo: Ambas comunas presentan niveles identicos de concentracion en este momento.")
+    except:
+        pass
+else:
+    st.warning("No hay suficientes datos disponibles para realizar la comparacion en este momento.")
+
+st.divider()
+
+# --- SECCIÓN 4: EXPORTACIÓN ---
 st.subheader("Generacion de Reportes de Cumplimiento")
 st.write(f"Descarga informes gerenciales auditables para **{cliente_activo}**.")
 
