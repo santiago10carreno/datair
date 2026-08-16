@@ -616,7 +616,7 @@ with tab6:
                             
     if alertas_futuras:
         df_futuro = pd.DataFrame(alertas_futuras).sort_values("Inicio Proyectado").reset_index(drop=True)
-        st.warning(f"⚠️ ¡ATENCIÓN! Se proyectan superaciones a la norma en **{len(alertas_futuras)}** estaciones para los próximos días.")
+        st.warning(f"¡ATENCIÓN! Se proyectan superaciones a la norma en **{len(alertas_futuras)}** estaciones para los próximos días.")
         st.dataframe(df_futuro, use_container_width=True, hide_index=True)
     else:
         st.info("El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
