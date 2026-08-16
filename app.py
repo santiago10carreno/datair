@@ -6,7 +6,6 @@ import io
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import CellIsRule
-from openpyxl.chart import LineChart, Reference
 import concurrent.futures
 import math
 import numpy as np
@@ -20,8 +19,6 @@ st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-        
-        /* CÓDIGO CSS LIMPIO: La flecha de la barra lateral funcionará de manera natural */
         
         /* ANCHO DE LA BARRA LATERAL */
         [data-testid="stSidebar"] {
@@ -44,7 +41,6 @@ st.markdown("""
             border-left: 4px solid #4A90E2; 
         }
         
-        /* FIX PARA TEXTOS CORTADOS */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
@@ -63,7 +59,6 @@ st.markdown("""
             font-size: 1.05rem; font-weight: 600;
         }
         
-        /* Estilo para el reporte de IA */
         .ai-report-box {
             background-color: #141618;
             border: 1px solid #3A3F47;
@@ -78,7 +73,6 @@ st.markdown("""
 # ==========================================
 # 1. BASE DE DATOS GEOGRÁFICA Y HARDWARE
 # ==========================================
-# La Región Metropolitana ahora es la primera para ser la vista predeterminada
 DICCIONARIO_ZONAS = {
     "Región Metropolitana": {"Santiago Centro": {"Parque O'Higgins": (-33.4641, -70.6607)}, "Independencia": {"Independencia": (-33.4150, -70.6528)}, "Pudahuel": {"Pudahuel": (-33.4326, -70.7818)}, "Quilicura": {"Quilicura": (-33.3663, -70.7351)}, "Las Condes": {"Las Condes": (-33.3769, -70.5239)}, "Cerrillos": {"Cerrillos": (-33.4939, -70.7161)}, "El Bosque": {"El Bosque": (-33.5350, -70.6766)}, "Cerro Navia": {"Cerro Navia": (-33.4334, -70.7348)}, "Puente Alto": {"Puente Alto": (-33.6163, -70.5831)}, "Talagante": {"Talagante": (-33.6669, -70.9275)}},
     "Región de Antofagasta": {"Antofagasta": {"Antofagasta (Centro)": (-23.6500, -70.4000)}, "Calama": {"Calama": (-22.4500, -68.9300)}},
@@ -390,8 +384,9 @@ if modulo_activo == "Dashboard":
     </div>
     """, unsafe_allow_html=True)
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "Monitoreo Espacial", "Análisis Histórico", "Proyección", "Benchmarking", "Multivariable", "Meteorología y SAT"
+    # ¡AQUÍ ESTÁ LA MAGIA DE VUELTA! Restauramos el Centro de Alertas como una pestaña individual
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "Monitoreo Espacial", "Análisis Histórico", "Proyección", "Benchmarking", "Multivariable", "Meteorología Local", "Centro de Alertas (SAT)"
     ])
 
     with tab1:
@@ -607,7 +602,7 @@ if modulo_activo == "Dashboard":
                     st.plotly_chart(fig_norm, use_container_width=True)
 
     with tab6:
-        st.subheader("Clima Local y Sala de Control Central (SAT)")
+        st.subheader("Condiciones Meteorológicas Locales")
         col_m1, col_m2, col_m3 = st.columns(3)
         with col_m1: reg_m = st.selectbox("Región Clima", list(diccionario_activo.keys()), key="reg_m")
         with col_m2: com_m = st.selectbox("Comuna Clima", list(diccionario_activo[reg_m].keys()), key="com_m")
@@ -630,11 +625,47 @@ if modulo_activo == "Dashboard":
             with col_k2: st.metric("Viento", f"{viento_actual:.1f} km/h")
             with col_k3: st.metric("Dirección", f"{dir_cardinal} ({dir_grados}°)")
 
-        st.divider()
+    with tab7:
+        st.subheader("Sala de Control Central (SAT)")
+        
         st.markdown("### Bitácora de Infracciones (Últimas 24h)")
-        alertas_pasadas = [{"Último Peak": serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)][serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)] > limite_actual].index[-1].strftime("%Y-%m-%d %H:00"), "Región": r, "Comuna": c, "Estación": s, "Peak": round(serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)].max(), 1), "Horas Falla": (serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)] > limite_actual).sum()} for r, coms in datos_totales.items() for c, secs in coms.items() for s, serie in secs.items() if not serie.empty and (serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)] > limite_actual).sum() > 0]
-        if alertas_pasadas: st.dataframe(pd.DataFrame(alertas_pasadas).sort_values("Último Peak", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True)
-        else: st.success("No hay superaciones en 24h.")
+        alertas_pasadas = []
+        for region, comunas in datos_totales.items():
+            for comuna, sectores in comunas.items():
+                for sector, serie in sectores.items():
+                    if not serie.empty:
+                        serie_24h = serie[(serie.index >= ahora - pd.Timedelta(hours=24)) & (serie.index <= ahora)]
+                        if not serie_24h.empty and (serie_24h > limite_actual).sum() > 0:
+                            alertas_pasadas.append({
+                                "Último Peak": serie_24h[serie_24h > limite_actual].index[-1].strftime("%Y-%m-%d %H:00"),
+                                "Región": region, "Comuna": comuna, "Estación": sector,
+                                "Peak": round(serie_24h.max(), 1), "Horas Falla": (serie_24h > limite_actual).sum()
+                            })
+        if alertas_pasadas:
+            st.dataframe(pd.DataFrame(alertas_pasadas).sort_values("Último Peak", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True)
+        else:
+            st.success("No hay superaciones a la norma en las últimas 24 horas.")
+
+        st.divider()
+
+        st.markdown("### Sistema de Alerta Temprana - Próximas 72 Horas")
+        alertas_futuras = []
+        for region, comunas in datos_totales.items():
+            for comuna, sectores in comunas.items():
+                for sector, serie in sectores.items():
+                    if not serie.empty:
+                        serie_futura = serie[serie.index > ahora]
+                        if not serie_futura.empty and (serie_futura > limite_actual).sum() > 0:
+                            alertas_futuras.append({
+                                "Inicio Proyectado": serie_futura[serie_futura > limite_actual].index[0].strftime("%Y-%m-%d %H:00"),
+                                "Región": region, "Comuna": comuna, "Estación": sector,
+                                "Peak Estimado": round(serie_futura.max(), 1)
+                            })
+        if alertas_futuras:
+            st.warning(f"Se proyectan superaciones a la norma en {len(alertas_futuras)} estaciones para los próximos días.")
+            st.dataframe(pd.DataFrame(alertas_futuras).sort_values("Inicio Proyectado").reset_index(drop=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
 
 # ==========================================
 # MÓDULO 2: SIMULADOR CONSULTIVO AI (B2B)
