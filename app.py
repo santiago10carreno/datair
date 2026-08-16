@@ -37,7 +37,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. BASE DE DATOS GEOGRÁFICA Y DE HARDWARE
+# 1. BASE DE DATOS GEOGRÁFICA Y HARDWARE
 # ==========================================
 DICCIONARIO_ZONAS = {
     "Región de Antofagasta": {"Antofagasta": {"Antofagasta (Centro)": (-23.6500, -70.4000)}, "Calama": {"Calama": (-22.4500, -68.9300)}},
@@ -53,8 +53,6 @@ DICCIONARIO_ZONAS = {
     "Región de Magallanes": {"Punta Arenas": {"Punta Arenas": (-53.1500, -70.9000)}}
 }
 
-# MAPA ESTRÍCTO DE SENSORES (Simulando la red real SINCA)
-# Si una estación no aparece aquí, el sistema asume que solo tiene sensores básicos (MP2.5 y MP10)
 MAPA_SENSORES = {
     "Quintero (Centro)": ["MP2.5", "MP10", "SO2", "NO2", "O3", "CO"],
     "Loncura": ["SO2", "NO2"],
@@ -110,11 +108,9 @@ def obtener_datos_estacion_individual(args):
 def descargar_todos_los_datos(contaminante_nombre, variable_api):
     lista_tareas = []
     estaciones_con_hardware = 0
-    
     for region, comunas in DICCIONARIO_ZONAS.items():
         for comuna, sectores in comunas.items():
             for sector, coords in sectores.items():
-                # REGLA DE VERACIDAD: Solo extraemos si el sensor físico existe
                 if contaminante_nombre in obtener_sensores_certificados(sector):
                     estaciones_con_hardware += 1
                     lista_tareas.append((coords[0], coords[1], variable_api, region, comuna, sector))
@@ -126,7 +122,6 @@ def descargar_todos_los_datos(contaminante_nombre, variable_api):
                 if region not in resultados_completos: resultados_completos[region] = {}
                 if comuna not in resultados_completos[region]: resultados_completos[region][comuna] = {}
                 resultados_completos[region][comuna][sector] = serie
-                
     return resultados_completos, estaciones_con_hardware
 
 @st.cache_data(ttl=3600)
@@ -134,13 +129,28 @@ def obtener_datos_multivariable(lat, lon, variables_api_lista):
     variables_str = ",".join(variables_api_lista)
     try:
         url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&hourly={variables_str}&timezone=America%2FSantiago&past_days=7&forecast_days=3"
-        respuesta = requests.get(url, timeout=5)
-        datos = respuesta.json()
+        res = requests.get(url, timeout=5)
+        datos = res.json()
         fechas = pd.to_datetime(datos['hourly']['time']).tz_localize(None)
         df_multi = pd.DataFrame(index=fechas)
-        for var in variables_api_lista:
-            df_multi[var] = datos['hourly'][var]
+        for var in variables_api_lista: df_multi[var] = datos['hourly'][var]
         return df_multi
+    except:
+        return pd.DataFrame()
+
+# NUEVO: Módulo de Extracción Meteorológica (Segunda API)
+@st.cache_data(ttl=3600)
+def obtener_meteorologia(lat, lon):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,wind_speed_10m&timezone=America%2FSantiago&past_days=7&forecast_days=3"
+        res = requests.get(url, timeout=5)
+        datos = res.json()
+        fechas = pd.to_datetime(datos['hourly']['time']).tz_localize(None)
+        df_met = pd.DataFrame({
+            'Temperatura (°C)': datos['hourly']['temperature_2m'],
+            'Velocidad Viento (km/h)': datos['hourly']['wind_speed_10m']
+        }, index=fechas)
+        return df_met.reset_index().rename(columns={'index': 'Fecha y Hora'})
     except:
         return pd.DataFrame()
 
@@ -191,7 +201,7 @@ st.divider()
 # ==========================================
 # SISTEMA DE PESTAÑAS (TABS)
 # ==========================================
-tab1, tab2, tab3, tab4 = st.tabs(["Monitoreo y Analisis", "Proyeccion a 72 Hrs", "Comparador Cruzado", "Perfil de Estacion"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Monitoreo y Analisis", "Proyeccion a 72 Hrs", "Comparador Cruzado", "Perfil de Estacion", "Contexto Meteorologico"])
 
 # ------------------------------------------
 # TAB 1: MONITOREO NORMAL Y EXPORTACIÓN
@@ -213,7 +223,6 @@ with tab1:
     st.divider()
     
     st.subheader("Filtros de Analisis Local Historico")
-    # Generar listas seguras basadas solo en datos existentes para este contaminante
     regiones_disponibles = list(datos_totales.keys())
     
     if regiones_disponibles:
@@ -356,8 +365,6 @@ with tab1:
                 file_name=f"Auditoria_{comuna_elegida}_{contaminante_elegido}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-    else:
-        st.error("Cambia el filtro de gas en la barra lateral.")
 
 # ------------------------------------------
 # TAB 2: PROYECCIÓN (FUTURO)
@@ -403,7 +410,7 @@ with tab2:
 # ------------------------------------------
 with tab3:
     st.subheader("Benchmarking Corporativo (Comparador Cruzado)")
-    st.write("Solo muestra zonas que cuentan con sensor físico para el contaminante global seleccionado.")
+    st.write("Solo muestra zonas que cuentan con sensor fisico para el contaminante global seleccionado.")
 
     if len(datos_totales) > 0:
         col_vs1, col_vs2 = st.columns(2)
@@ -448,8 +455,6 @@ with tab3:
                 elif diff < 0:
                     st.info(f"Insight Operativo: Actualmente, {com_a} presenta {abs(diff):.1f} µg/m³ MENOS de {contaminante_elegido} que {com_b}.")
             except: pass
-        else:
-            st.warning("No hay datos comparables en este momento.")
 
 # ------------------------------------------
 # TAB 4: PERFIL DE ESTACIÓN (MULTIVARIABLE)
@@ -463,13 +468,12 @@ with tab4:
     with col_p2: com_p = st.selectbox("Comuna", list(DICCIONARIO_ZONAS[reg_p].keys()), key="com_p_multi")
     with col_p3: est_p = st.selectbox("Estacion Especifica", list(DICCIONARIO_ZONAS[reg_p][com_p].keys()), key="est_p_multi")
 
-    # REGLA DE VERACIDAD PARA PESTAÑA MULTIVARIABLE
     sensores_certificados = obtener_sensores_certificados(est_p)
     st.success(f"Sensores de hardware detectados en {est_p}: **{', '.join(sensores_certificados)}**")
 
     contaminantes_seleccionados = st.multiselect(
         "1. Selecciona los contaminantes a comparar:", 
-        sensores_certificados,  # AHORA SOLO MUESTRA LOS QUE REALMENTE EXISTEN
+        sensores_certificados,  
         default=[s for s in ["MP2.5", "MP10"] if s in sensores_certificados]
     )
 
@@ -508,7 +512,63 @@ with tab4:
                 fig_norm.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
                 fig_norm.add_vrect(x0=ahora, x1=df_norm['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
                 st.plotly_chart(fig_norm, use_container_width=True)
-        else:
-            st.warning("No se pudieron cargar los datos.")
+
+# ------------------------------------------
+# TAB 5: CONTEXTO METEOROLÓGICO (NUEVO)
+# ------------------------------------------
+with tab5:
+    st.subheader("Contexto Meteorologico y Dispension")
+    st.write("Analiza como la temperatura y la velocidad del viento afectan la concentracion de contaminantes.")
+
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1: reg_m = st.selectbox("Region", list(DICCIONARIO_ZONAS.keys()), index=3, key="reg_m")
+    with col_m2: com_m = st.selectbox("Comuna", list(DICCIONARIO_ZONAS[reg_m].keys()), key="com_m")
+    with col_m3: est_m = st.selectbox("Estacion Especifica", list(DICCIONARIO_ZONAS[reg_m][com_m].keys()), key="est_m")
+
+    lat_m, lon_m = DICCIONARIO_ZONAS[reg_m][com_m][est_m]
+    
+    # Extraer meteorología de la nueva API
+    df_met = obtener_meteorologia(lat_m, lon_m)
+    
+    if not df_met.empty:
+        try:
+            idx_actual_met = df_met['Fecha y Hora'].get_indexer([ahora], method='nearest')[0]
+            temp_actual = df_met.iloc[idx_actual_met]['Temperatura (°C)']
+            viento_actual = df_met.iloc[idx_actual_met]['Velocidad Viento (km/h)']
+        except:
+            temp_actual, viento_actual = 0, 0
+
+        st.markdown(f"**Condiciones Actuales en {est_m}**")
+        col_k1, col_k2, col_k3 = st.columns(3)
+        with col_k1: st.metric("🌡️ Temperatura", f"{temp_actual:.1f} °C")
+        with col_k2: st.metric("🌬️ Velocidad del Viento", f"{viento_actual:.1f} km/h")
+        with col_k3:
+            # Buscar el dato actual del contaminante global elegido
+            val_c_str = "Sin datos"
+            if reg_m in datos_totales and com_m in datos_totales[reg_m] and est_m in datos_totales[reg_m][com_m]:
+                serie_cont = datos_totales[reg_m][com_m][est_m]
+                if not serie_cont.empty:
+                    try:
+                        idx_c = serie_cont.index.get_indexer([ahora], method='nearest')[0]
+                        val_c = serie_cont.iloc[idx_c]
+                        val_c_str = f"{val_c:.1f} µg/m³"
+                    except: pass
+            st.metric(f"☁️ Concentracion ({contaminante_elegido})", val_c_str)
+
+        st.divider()
+
+        st.markdown("**Evolucion de la Temperatura (Inversion Termica)**")
+        fig_temp = px.line(df_met, x='Fecha y Hora', y='Temperatura (°C)')
+        fig_temp.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+        fig_temp.add_vrect(x0=ahora, x1=df_met['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
+        fig_temp.update_traces(line_color="#FFA500")
+        st.plotly_chart(fig_temp, use_container_width=True)
+
+        st.markdown("**Evolucion de la Velocidad del Viento (Dispersion de Gases)**")
+        fig_viento = px.line(df_met, x='Fecha y Hora', y='Velocidad Viento (km/h)')
+        fig_viento.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+        fig_viento.add_vrect(x0=ahora, x1=df_met['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
+        fig_viento.update_traces(line_color="#00CED1")
+        st.plotly_chart(fig_viento, use_container_width=True)
     else:
-        st.info("Selecciona al menos un sensor.")
+        st.warning("Servidor meteorologico no disponible en este momento.")
