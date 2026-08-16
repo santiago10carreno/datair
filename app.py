@@ -21,53 +21,15 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* ========================================================
-           1. BLOQUEO DEL TEMPORIZADOR FANTASMA (AUTO-HIDE)
-           Obligamos a la barra superior a quedarse estática al 100%
-           de visibilidad, matando la animación nativa de Streamlit.
-        ======================================================== */
-        header[data-testid="stHeader"] {
-            opacity: 1 !important;
-            visibility: visible !important;
-            transform: translateY(0px) !important; 
-            transition: none !important; /* Apaga la animación de desaparición */
-            background-color: transparent !important;
-            pointer-events: none !important; /* Deja pasar el click al mapa */
-        }
+        /* 
+           ========================================================
+           HEMOS BORRADO TODA LA MAGIA QUE OCULTABA LA BARRA SUPERIOR.
+           Streamlit volverá a su estado 100% natural de fábrica.
+           La flecha funcionará perfectamente para que puedas testear.
+           ======================================================== 
+        */
 
-        /* ========================================================
-           2. FRANCOTIRADOR A LA BASURA DE LA DERECHA
-           stToolbar contiene el logo de Github, Deploy y el menú.
-           Lo aniquilamos de raíz para que ni siquiera intente cargar.
-        ======================================================== */
-        [data-testid="stToolbar"], 
-        .stAppDeployButton, 
-        [data-testid="stDecoration"] {
-            display: none !important;
-            opacity: 0 !important;
-            visibility: hidden !important;
-            pointer-events: none !important;
-        }
-
-        /* ========================================================
-           3. BLINDAJE DE LA FLECHA DE LA BARRA LATERAL
-           La atornillamos a la pantalla, visible y clickeable.
-        ======================================================== */
-        [data-testid="collapsedControl"] {
-            opacity: 1 !important;
-            visibility: visible !important;
-            pointer-events: auto !important; /* Le devolvemos el poder de clic */
-            background-color: #1A1C1E !important;
-            border: 1px solid #3A3F47 !important;
-            border-radius: 6px !important;
-            color: #E2E8F0 !important;
-            z-index: 999999 !important;
-            transition: none !important;
-        }
-
-        /* ========================================================
-           4. DISEÑO CORPORATIVO (Métricas y Textos)
-        ======================================================== */
+        /* DISEÑO CORPORATIVO (Métricas y Textos) */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
