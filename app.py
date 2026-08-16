@@ -20,12 +20,21 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        #MainMenu {display: none !important; visibility: hidden !important;} 
-        footer {display: none !important; visibility: hidden !important;} 
-        /* header {display: none !important;} ELIMINADO PARA DEJAR VIVIR AL BOTÓN DE LA BARRA LATERAL */
+        /* OCULTAR ELEMENTOS BASURA SIN ROMPER LA BARRA LATERAL */
+        #MainMenu {visibility: hidden !important;} 
+        footer {visibility: hidden !important;} 
+        header {background-color: transparent !important;} /* Header transparente en vez de borrado */
         
-        [data-testid="stDecoration"], [data-testid="stToolbar"], [data-testid="stStatusWidget"], [data-testid="manage-app-button"], .viewerBadge_container, .viewerBadge_link {display: none !important;}
-        a[href^="https://streamlit.io"] {display: none !important;}
+        /* Ocultar botón Deploy y Toolbar molesto */
+        .stAppDeployButton, [data-testid="stToolbar"] {display: none !important;}
+        
+        /* FORZAR QUE EL BOTÓN DE LA BARRA LATERAL SIEMPRE FUNCIONE */
+        [data-testid="collapsedControl"] {
+            display: flex !important;
+            z-index: 999999 !important;
+            background-color: rgba(26, 28, 30, 0.7) !important;
+            border-radius: 5px !important;
+        }
 
         /* DISEÑO DE CAJAS DE MÉTRICAS */
         div[data-testid="metric-container"] {
@@ -718,7 +727,7 @@ with tab6:
         st.error(f"⚠️ Se detectaron vulneraciones a la normativa en **{len(alertas_pasadas)}** estaciones durante las últimas 24 horas.")
         st.dataframe(df_alertas, use_container_width=True, hide_index=True)
         
-        # --- NUEVO: GRÁFICOS AUTOMÁTICOS PARA EL PASADO ---
+        # --- GRÁFICOS AUTOMÁTICOS PARA EL PASADO ---
         st.markdown("#### 📉 Evidencia Gráfica de Infracciones (Últimas 24h)")
         for alerta in alertas_pasadas:
             reg_graf = alerta["Región"]
