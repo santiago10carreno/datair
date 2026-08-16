@@ -20,12 +20,12 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* 1. OCULTAMOS SOLO LA BASURA, SIN TOCAR EL MECANISMO DE LA BARRA LATERAL */
-        .stAppDeployButton, [data-testid="stToolbar"], [data-testid="stDecoration"] {
-            display: none !important;
-        }
+        /* HEMOS BORRADO TODAS LAS REGLAS DE OCULTAMIENTO DE LA BARRA SUPERIOR */
+        /* Streamlit funcionará con su diseño 100% nativo de fábrica */
 
-        /* 2. DISEÑO DE LAS MÉTRICAS (Alineación perfecta) */
+        /* ==========================================
+           DISEÑO DE LAS MÉTRICAS (Alineación perfecta)
+        ========================================== */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -39,7 +39,6 @@ st.markdown("""
             width: 100% !important;
         }
         
-        /* 3. FIX PARA TEXTOS CORTADOS */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
