@@ -67,7 +67,7 @@ st.markdown("""
             border-radius: 8px;
             padding: 25px;
             margin-top: 15px;
-            border-top: 4px solid #8F3F97; /* Color IA */
+            border-top: 4px solid #8F3F97; 
         }
     </style>
 """, unsafe_allow_html=True)
@@ -182,7 +182,7 @@ var_api = configuracion[contaminante_elegido]["api"]
 limite_actual = configuracion[contaminante_elegido]["limite"]
 
 # ==========================================
-# 4. EXTRACCIÓN ASÍNCRONA (DUAL)
+# 4. EXTRACCIÓN ASÍNCRONA (DUAL Y MULTIVARIABLE)
 # ==========================================
 def obtener_datos_estacion_individual(args):
     lat, lon, variable, region, comuna, sector = args
@@ -234,6 +234,36 @@ def descargar_todos_los_datos(contaminante_nombre, variable_api, fuente):
                 resultados_completos[region][comuna][sector] = serie
     return resultados_completos, estaciones_con_hardware
 
+@st.cache_data(ttl=3600)
+def obtener_datos_multivariable(lat, lon, variables_api_lista):
+    variables_str = ",".join(variables_api_lista)
+    try:
+        url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&hourly={variables_str}&timezone=America%2FSantiago&past_days=7&forecast_days=3"
+        res = requests.get(url, timeout=5)
+        datos = res.json()
+        fechas = pd.to_datetime(datos['hourly']['time']).tz_localize(None)
+        df_multi = pd.DataFrame(index=fechas)
+        for var in variables_api_lista: df_multi[var] = datos['hourly'][var]
+        return df_multi
+    except:
+        return pd.DataFrame()
+
+@st.cache_data(ttl=3600)
+def obtener_meteorologia(lat, lon):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m&timezone=America%2FSantiago&past_days=7&forecast_days=3"
+        res = requests.get(url, timeout=5)
+        datos = res.json()
+        fechas = pd.to_datetime(datos['hourly']['time']).tz_localize(None)
+        df_met = pd.DataFrame({
+            'Temperatura (°C)': datos['hourly']['temperature_2m'],
+            'Velocidad Viento (km/h)': datos['hourly']['wind_speed_10m'],
+            'Direccion Viento (°)': datos['hourly']['wind_direction_10m']
+        }, index=fechas)
+        return df_met.reset_index().rename(columns={'index': 'Fecha y Hora'})
+    except:
+        return pd.DataFrame()
+
 def obtener_viento_batch(df):
     if df.empty: return df
     lats = ",".join(df['Latitud'].astype(str))
@@ -264,7 +294,7 @@ def consultar_clima_coordenada(lat, lon):
         res = requests.get(url, timeout=5).json()
         return res['current']['wind_speed_10m'], res['current']['wind_direction_10m'], res['current']['temperature_2m']
     except:
-        return 5.0, 90, 15.0 # Valores por defecto en caso de falla
+        return 5.0, 90, 15.0 
 
 datos_totales, total_hardware_valido = descargar_todos_los_datos(contaminante_elegido, var_api, fuente_datos)
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
@@ -323,11 +353,21 @@ if estaciones_criticas > 0:
 
 st.divider()
 
+st.markdown("""
+<div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; font-size: 0.9rem;">
+    <div><span style="color:#00E400;">🟢</span> Bueno</div>
+    <div><span style="color:#FFFF00;">🟡</span> Regular</div>
+    <div><span style="color:#FF7E00;">🟠</span> Alerta</div>
+    <div><span style="color:#FF0000;">🔴</span> Preemergencia</div>
+    <div><span style="color:#8F3F97;">🟣</span> Emergencia</div>
+</div>
+""", unsafe_allow_html=True)
+
 # ==========================================
 # SISTEMA DE PESTAÑAS (TABS)
 # ==========================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Monitoreo Espacial", "Análisis Histórico y Auditoría", "Benchmarking Corporativo", "Centro de Alertas (SAT)", "Simulador de Impacto AI ✨"
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "Monitoreo Espacial", "Análisis Histórico", "Proyección", "Benchmarking", "Multivariable", "Meteorología y SAT", "Simulador AI ✨"
 ])
 
 # ------------------------------------------
@@ -349,12 +389,68 @@ with tab1:
         st.plotly_chart(fig_mapa, use_container_width=True)
     else:
         st.warning(f"No hay estaciones certificadas conectadas actualmente.")
+    
+    st.divider()
+    
+    st.subheader("Modelo de Dispersión Atmosférica")
+    if not df_mapa.empty:
+        df_vectores = obtener_viento_batch(df_mapa.copy())
+        
+        puntos_pluma = []
+        for _, row in df_vectores.iterrows():
+            lat = row['Latitud']
+            lon = row['Longitud']
+            c = row['Concentracion']
+            spd = row.get('WindSpd', 0)
+            dir_viento = row.get('WindDir', 0)
+            
+            puntos_pluma.append(row.to_dict())
+            
+            if spd > 1:
+                angulo_viaje = (dir_viento + 180) % 360
+                angulo_rad = math.radians(90 - angulo_viaje)
+                pasos = 8
+                dist_max = spd * 0.015 
+                for i in range(1, pasos + 1):
+                    frac = i / pasos
+                    dist = dist_max * frac
+                    d_lat = dist * math.sin(angulo_rad)
+                    d_lon = dist * math.cos(angulo_rad) / math.cos(math.radians(lat))
+                    
+                    c_fantasma = c * (1 - frac)**1.5 
+                    if c_fantasma > (limite_actual * 0.05):
+                        nuevo_punto = row.to_dict()
+                        nuevo_punto['Latitud'] = lat + d_lat
+                        nuevo_punto['Longitud'] = lon + d_lon
+                        nuevo_punto['Concentracion'] = c_fantasma
+                        nuevo_punto['Estacion'] = f"Viento desde {row['Estacion']}"
+                        puntos_pluma.append(nuevo_punto)
+        
+        df_pluma = pd.DataFrame(puntos_pluma)
+        regiones_disp = list(df_vectores['Region'].unique())
+        reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, key="heatmap_region")
+        
+        df_region_mapa = df_vectores[df_vectores['Region'] == reg_mapa]
+        if not df_region_mapa.empty:
+            lat_centro = df_region_mapa['Latitud'].mean()
+            lon_centro = df_region_mapa['Longitud'].mean()
+        else:
+            lat_centro, lon_centro = -35.0, -71.0
+
+        fig_heat = px.density_mapbox(
+            df_pluma, lat="Latitud", lon="Longitud", z="Concentracion",
+            radius=60, center={"lat": lat_centro, "lon": lon_centro}, 
+            zoom=8, mapbox_style="carto-darkmatter", color_continuous_scale="Inferno", 
+            opacity=0.6, hover_name="Estacion"
+        )
+        fig_heat.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
+        st.plotly_chart(fig_heat, use_container_width=True)
 
 # ------------------------------------------
-# TAB 2: HISTÓRICO Y REPORTES
+# TAB 2: ANÁLISIS HISTÓRICO Y AUDITORÍA
 # ------------------------------------------
 with tab2:
-    st.subheader("Análisis de Tendencias")
+    st.subheader("Análisis Histórico Local")
     regiones_disponibles = list(datos_totales.keys())
     if regiones_disponibles:
         col_filtro1, col_filtro2 = st.columns(2)
@@ -362,38 +458,273 @@ with tab2:
         with col_filtro2: comuna_elegida = st.selectbox("Selecciona la Comuna", list(datos_totales[region_elegida].keys()), key="com_hist")
 
         datos_sectores_comuna = {}
-        for comuna, sectores in datos_totales[region_elegida].items():
-            if comuna == comuna_elegida:
-                for sector, serie in sectores.items():
-                    datos_sectores_comuna[sector] = serie
+        lista_promedios_comunas = {}
 
+        for comuna, sectores in datos_totales[region_elegida].items():
+            series_comuna = []
+            for sector, serie in sectores.items():
+                series_comuna.append(serie)
+                if comuna == comuna_elegida:
+                    datos_sectores_comuna[sector] = serie
+            if series_comuna:
+                lista_promedios_comunas[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
+
+        df_region_completo = pd.DataFrame(lista_promedios_comunas).reset_index().rename(columns={'index': 'Fecha y Hora'})
         df_comuna_completo = pd.DataFrame(datos_sectores_comuna).reset_index().rename(columns={'index': 'Fecha y Hora'})
+        
+        df_region_historico = df_region_completo[df_region_completo['Fecha y Hora'] <= ahora]
         df_comuna_historico = df_comuna_completo[df_comuna_completo['Fecha y Hora'] <= ahora]
 
+        st.subheader(f"Histórico Regional: {region_elegida}")
+        fig_reg_hist = px.line(df_region_historico, x='Fecha y Hora', y=df_region_historico.columns[1:], labels={'value': 'Concentración (µg/m³)', 'variable': 'Comuna'})
+        fig_reg_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Límite Legal")
+        st.plotly_chart(fig_reg_hist, use_container_width=True)
+
+        st.subheader(f"Histórico Comunal: {comuna_elegida}")
         fig_com_hist = px.line(df_comuna_historico, x='Fecha y Hora', y=df_comuna_historico.columns[1:], labels={'value': 'Concentración (µg/m³)', 'variable': 'Estación'})
         fig_com_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Límite Legal")
         st.plotly_chart(fig_com_hist, use_container_width=True)
+        
+        st.divider()
+        st.subheader("Generación de Reportes de Cumplimiento")
+        
+        def generar_excel_universal(df_datos, contaminante, limite, nombre_zona, tipo_zona):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_datos.to_excel(writer, sheet_name='Base_Datos', index=False, startrow=3)
+                ws_resumen = writer.book.create_sheet('Dashboard_Ejecutivo', 0)
+                ws_datos = writer.sheets['Base_Datos']
+                
+                ws_datos['A1'] = f"REGISTRO CONTINUO - {contaminante} ({nombre_zona})"
+                ws_datos['A1'].font = Font(size=12, bold=True)
+                ws_datos['A2'] = f"Limite Normativo: {limite} µg/m³"
+                ws_datos['A2'].font = Font(italic=True, color="595959")
+                
+                header_fill, header_font = PatternFill(start_color="2F75B5", fill_type="solid"), Font(bold=True, color="FFFFFF")
+                columnas_datos = list(df_datos.columns)[1:] 
+                
+                for col_idx, _ in enumerate(df_datos.columns, start=1):
+                    col_letter = openpyxl.utils.get_column_letter(col_idx)
+                    ws_datos[f'{col_letter}4'].fill = header_fill
+                    ws_datos[f'{col_letter}4'].font = header_font
+                    ws_datos.column_dimensions[col_letter].width = 22
+                    
+                red_fill, red_font = PatternFill(start_color="FFC7CE", fill_type="solid"), Font(color="9C0006", bold=True)
+                green_fill, green_font = PatternFill(start_color="C6EFCE", fill_type="solid"), Font(color="006100")
+                
+                rule_over = CellIsRule(operator='greaterThan', formula=[str(limite)], stopIfTrue=True, fill=red_fill, font=red_font)
+                rule_under = CellIsRule(operator='lessThanOrEqual', formula=[str(limite)], stopIfTrue=True, fill=green_fill, font=green_font)
+                
+                ultima_letra = openpyxl.utils.get_column_letter(len(df_datos.columns))
+                ws_datos.conditional_formatting.add(f'B5:{ultima_letra}{len(df_datos)+4}', rule_over)
+                ws_formatting = ws_datos.conditional_formatting
+                ws_formatting.add(f'B5:{ultima_letra}{len(df_datos)+4}', rule_under)
+                
+            return output.getvalue()
+
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            excel_region = generar_excel_universal(df_region_historico, contaminante_elegido, limite_actual, region_elegida, "Region")
+            st.download_button(label=f"📥 Descargar Data Regional ({region_elegida})", data=excel_region, file_name=f"Auditoria_{region_elegida}.xlsx")
+        with col_btn2:
+            excel_comuna = generar_excel_universal(df_comuna_historico, contaminante_elegido, limite_actual, comuna_elegida, "Comuna")
+            st.download_button(label=f"📥 Descargar Data Comunal ({comuna_elegida})", data=excel_comuna, file_name=f"Auditoria_{comuna_elegida}.xlsx")
 
 # ------------------------------------------
-# TAB 3: BENCHMARKING
+# TAB 3: PROYECCIÓN PREDICTIVA
 # ------------------------------------------
 with tab3:
-    st.subheader("Benchmarking Corporativo")
-    st.info("Módulo de comparación cruzada entre comunas en desarrollo para la versión oficial.")
+    st.subheader("Modelos Predictivos Espaciales")
+    if regiones_disponibles:
+        col_proy1, col_proy2 = st.columns(2)
+        with col_proy1: reg_proy = st.selectbox("Selecciona la Región", regiones_disponibles, key="reg_proy")
+        with col_proy2: com_proy = st.selectbox("Selecciona la Comuna", list(datos_totales[reg_proy].keys()), key="com_proy")
+
+        datos_sectores_proy = {}
+        lista_promedios_proy = {}
+        for comuna, sectores in datos_totales[reg_proy].items():
+            series_comuna = []
+            for sector, serie in sectores.items():
+                series_comuna.append(serie)
+                if comuna == com_proy: datos_sectores_proy[sector] = serie
+            if series_comuna: lista_promedios_proy[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
+
+        df_region_proy = pd.DataFrame(lista_promedios_proy).reset_index().rename(columns={'index': 'Fecha y Hora'})
+        df_comuna_proy = pd.DataFrame(datos_sectores_proy).reset_index().rename(columns={'index': 'Fecha y Hora'})
+
+        fig_region_pred = px.line(df_region_proy, x='Fecha y Hora', y=df_region_proy.columns[1:], labels={'value': 'Concentración (µg/m³)', 'variable': 'Comuna'})
+        fig_region_pred.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Límite Legal")
+        fig_region_pred.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+        st.plotly_chart(fig_region_pred, use_container_width=True)
+
+        fig_comuna_pred = px.line(df_comuna_proy, x='Fecha y Hora', y=df_comuna_proy.columns[1:], labels={'value': 'Concentración (µg/m³)', 'variable': 'Estación'})
+        fig_comuna_pred.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Límite Legal")
+        fig_comuna_pred.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+        st.plotly_chart(fig_comuna_pred, use_container_width=True)
 
 # ------------------------------------------
-# TAB 4: CENTRO DE ALERTAS
+# TAB 4: BENCHMARKING
 # ------------------------------------------
 with tab4:
-    st.subheader("Sala de Control Central (SAT)")
-    st.info("El Centro de Alertas automatizado está monitoreando las proyecciones meteorológicas de los próximos 3 días.")
+    st.subheader("Benchmarking Corporativo (Comparador Cruzado)")
+    if len(datos_totales) > 0:
+        col_vs1, col_vs2 = st.columns(2)
+        with col_vs1:
+            reg_a = st.selectbox("Región A", list(datos_totales.keys()), key="reg_a")
+            com_a = st.selectbox("Comuna A", list(datos_totales[reg_a].keys()), key="com_a")
+        with col_vs2:
+            reg_b = st.selectbox("Región B", list(datos_totales.keys()), index=min(1, len(datos_totales)-1), key="reg_b")
+            com_b = st.selectbox("Comuna B", list(datos_totales[reg_b].keys()), key="com_b")
+
+        def obtener_promedio_comuna(region, comuna):
+            series = []
+            if region in datos_totales and comuna in datos_totales[region]:
+                for sector, serie in datos_totales[region][comuna].items():
+                    if not serie.empty: series.append(serie)
+            if series: return pd.concat(series, axis=1).mean(axis=1)
+            return pd.Series(dtype=float)
+
+        promedio_a = obtener_promedio_comuna(reg_a, com_a)
+        promedio_b = obtener_promedio_comuna(reg_b, com_b)
+
+        if not promedio_a.empty and not promedio_b.empty:
+            df_vs = pd.DataFrame({com_a: promedio_a, com_b: promedio_b}).reset_index().rename(columns={'index': 'Fecha y Hora'})
+            fig_vs = px.line(df_vs, x='Fecha y Hora', y=[com_a, com_b], labels={'value': 'Concentración (µg/m³)', 'variable': 'Zona Analizada'})
+            fig_vs.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Límite Legal")
+            st.plotly_chart(fig_vs, use_container_width=True)
 
 # ------------------------------------------
-# TAB 5: SIMULADOR DE IMPACTO AI ✨ (NUEVO MÓDULO B2B)
+# TAB 5: MULTIVARIABLE
 # ------------------------------------------
 with tab5:
+    st.subheader("Perfil de Estación (Análisis Multivariable)")
+    col_p1, col_p2, col_p3 = st.columns(3)
+    
+    with col_p1: reg_p = st.selectbox("Región", list(diccionario_activo.keys()), key="reg_p_multi")
+    with col_p2: com_p = st.selectbox("Comuna", list(diccionario_activo[reg_p].keys()), key="com_p_multi")
+    with col_p3: est_p = st.selectbox("Estación", list(diccionario_activo[reg_p][com_p].keys()), key="est_p_multi")
+
+    sensores_certificados = obtener_sensores_certificados(est_p)
+    contaminantes_seleccionados = st.multiselect(
+        "Selecciona los contaminantes a comparar:", sensores_certificados,  
+        default=[s for s in ["MP2.5", "MP10"] if s in sensores_certificados]
+    )
+
+    modo_vista = st.radio("Modo de Visualización:", ["Gráfico Unificado (Porcentaje del Límite)", "Gráficos Separados (Absolutos)"], horizontal=True)
+
+    if contaminantes_seleccionados:
+        lat_p, lon_p = diccionario_activo[reg_p][com_p][est_p]
+        vars_api = [configuracion[c]["api"] for c in contaminantes_seleccionados]
+        df_multi = obtener_datos_multivariable(lat_p, lon_p, vars_api)
+        
+        if not df_multi.empty:
+            df_multi = df_multi.rename(columns={configuracion[c]["api"]: c for c in contaminantes_seleccionados}).reset_index().rename(columns={'index': 'Fecha y Hora'})
+            if "Separados" in modo_vista:
+                df_melt = df_multi.melt(id_vars=['Fecha y Hora'], value_vars=contaminantes_seleccionados, var_name='Contaminante', value_name='Concentración')
+                fig_multi = px.line(df_melt, x='Fecha y Hora', y='Concentración', facet_row='Contaminante', height=250 * len(contaminantes_seleccionados))
+                fig_multi.update_yaxes(matches=None)
+                fig_multi.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+                st.plotly_chart(fig_multi, use_container_width=True)
+            else:
+                df_norm = df_multi.copy()
+                for c in contaminantes_seleccionados: df_norm[c] = (df_norm[c] / configuracion[c]["limite"]) * 100
+                df_melt_norm = df_norm.melt(id_vars=['Fecha y Hora'], value_vars=contaminantes_seleccionados, var_name='Contaminante', value_name='Porcentaje del Límite (%)')
+                fig_norm = px.line(df_melt_norm, x='Fecha y Hora', y='Porcentaje del Límite (%)', color='Contaminante')
+                fig_norm.add_hline(y=100, line_dash="dot", line_color="red", annotation_text="LÍMITE LEGAL (100%)")
+                fig_norm.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+                st.plotly_chart(fig_norm, use_container_width=True)
+
+# ------------------------------------------
+# TAB 6: METEOROLOGÍA Y SAT
+# ------------------------------------------
+with tab6:
+    st.subheader("Clima Local y Sala de Control Central (SAT)")
+    
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1: reg_m = st.selectbox("Región Clima", list(diccionario_activo.keys()), key="reg_m")
+    with col_m2: com_m = st.selectbox("Comuna Clima", list(diccionario_activo[reg_m].keys()), key="com_m")
+    with col_m3: est_m = st.selectbox("Estación Clima", list(diccionario_activo[reg_m][com_m].keys()), key="est_m")
+
+    lat_m, lon_m = diccionario_activo[reg_m][com_m][est_m]
+    df_met = obtener_meteorologia(lat_m, lon_m)
+    
+    if not df_met.empty:
+        try:
+            idx_actual_met = df_met['Fecha y Hora'].get_indexer([ahora], method='nearest')[0]
+            temp_actual = df_met.iloc[idx_actual_met]['Temperatura (°C)']
+            viento_actual = df_met.iloc[idx_actual_met]['Velocidad Viento (km/h)']
+            dir_grados = df_met.iloc[idx_actual_met]['Direccion Viento (°)']
+            def grados_a_cardinal_local(d):
+                dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+                return dirs[int((d + 11.25)/22.5) % 16]
+            dir_cardinal = grados_a_cardinal_local(dir_grados)
+        except:
+            temp_actual, viento_actual, dir_grados, dir_cardinal = 0, 0, 0, "N/A"
+
+        col_k1, col_k2, col_k3 = st.columns(3)
+        with col_k1: st.metric("🌡️ Temperatura", f"{temp_actual:.1f} °C")
+        with col_k2: st.metric("🌬️ Velocidad Viento", f"{viento_actual:.1f} km/h")
+        with col_k3: st.metric("🧭 Dirección Viento", f"{dir_cardinal} ({dir_grados}°)")
+
+    st.divider()
+    
+    st.markdown("### 📜 Bitácora de Infracciones (Últimas 24 Horas)")
+    alertas_pasadas = []
+    hace_24h = ahora - pd.Timedelta(hours=24)
+    for region, comunas in datos_totales.items():
+        for comuna, sectores in comunas.items():
+            for sector, serie in sectores.items():
+                if not serie.empty:
+                    serie_24h = serie[(serie.index >= hace_24h) & (serie.index <= ahora)]
+                    if not serie_24h.empty:
+                        horas_infraccion = (serie_24h > limite_actual).sum()
+                        if horas_infraccion > 0:
+                            peak = serie_24h.max()
+                            ultimo_momento = serie_24h[serie_24h > limite_actual].index[-1]
+                            alertas_pasadas.append({
+                                "Último Peak": ultimo_momento.strftime("%Y-%m-%d %H:00"),
+                                "Región": region, "Comuna": comuna, "Estación": sector,
+                                "Peak": round(peak, 1), "Horas Falla": horas_infraccion
+                            })
+    
+    if alertas_pasadas:
+        df_alertas = pd.DataFrame(alertas_pasadas).sort_values("Último Peak", ascending=False).reset_index(drop=True)
+        st.error(f"⚠️ Se detectaron vulneraciones a la normativa en **{len(alertas_pasadas)}** estaciones.")
+        st.dataframe(df_alertas, use_container_width=True, hide_index=True)
+    else:
+        st.success(f"✅ No se han registrado superaciones a la norma en las últimas 24 horas.")
+
+    st.markdown("### 🔮 Sistema de Alerta Temprana (SAT) - Próximas 72 Horas")
+    alertas_futuras = []
+    for region, comunas in datos_totales.items():
+        for comuna, sectores in comunas.items():
+            for sector, serie in sectores.items():
+                if not serie.empty:
+                    serie_futura = serie[serie.index > ahora]
+                    if not serie_futura.empty:
+                        horas_peligro = (serie_futura > limite_actual).sum()
+                        if horas_peligro > 0:
+                            peak_futuro = serie_futura.max()
+                            inicio_episodio = serie_futura[serie_futura > limite_actual].index[0]
+                            alertas_futuras.append({
+                                "Inicio Proyectado": inicio_episodio.strftime("%Y-%m-%d %H:00"),
+                                "Región": region, "Comuna": comuna, "Estación": sector,
+                                "Peak Estimado": round(peak_futuro, 1)
+                            })
+                            
+    if alertas_futuras:
+        df_futuro = pd.DataFrame(alertas_futuras).sort_values("Inicio Proyectado").reset_index(drop=True)
+        st.warning(f"⚠️ Se proyectan superaciones a la norma en **{len(alertas_futuras)}** estaciones para los próximos días.")
+        st.dataframe(df_futuro, use_container_width=True, hide_index=True)
+    else:
+        st.info("✅ El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
+
+# ------------------------------------------
+# TAB 7: SIMULADOR DE IMPACTO AI ✨
+# ------------------------------------------
+with tab7:
     st.subheader("Datair AI | Simulador de Emisiones y Plan de Mitigación")
-    st.write("Herramienta consultiva: Ingrese las coordenadas de su operación industrial. Nuestra IA cruzará su tasa de emisión con el viento en tiempo real para generar un informe de riesgo y un plan de acción.")
+    st.write("Herramienta consultiva B2B: Ingrese las coordenadas de su operación industrial. Nuestra IA cruzará su tasa de emisión con el viento en tiempo real para generar un informe de riesgo y un plan de acción.")
 
     col_ai1, col_ai2 = st.columns([1, 2])
     
@@ -401,7 +732,7 @@ with tab5:
         st.markdown("**⚙️ Parámetros de Operación**")
         lat_em = st.number_input("Latitud de la Chimenea/Descarga", value=-34.1708, format="%.4f")
         lon_em = st.number_input("Longitud de la Chimenea/Descarga", value=-70.7441, format="%.4f")
-        contam_em = st.selectbox("Tipo de Contaminante", ["MP10", "MP2.5", "SO2"])
+        contam_em = st.selectbox("Tipo de Contaminante a simular", ["MP10", "MP2.5", "SO2"])
         tasa_em = st.number_input("Tasa de Emisión (kg/hora)", min_value=0.1, value=50.0, step=1.0)
         altura_em = st.number_input("Altura de la Chimenea (m)", min_value=1.0, value=30.0, step=1.0)
         
@@ -415,20 +746,17 @@ with tab5:
                 # 1. Obtener clima real de esa coordenada
                 vel_viento, dir_viento, temp_actual = consultar_clima_coordenada(lat_em, lon_em)
                 
-                # 2. Motor Matemático Simplificado (Dispersión Gaussiana Básica para Demo)
-                # Simulamos hacia dónde va la pluma de contaminación
+                # 2. Motor Matemático Simplificado (Dispersión Gaussiana)
                 angulo_viaje = (dir_viento + 180) % 360
                 angulo_rad = math.radians(90 - angulo_viaje)
                 
-                # Calcular concentración peak estimada a nivel de suelo (Fórmula simplificada)
-                distancia_impacto = (altura_em * 15) if vel_viento > 0 else 100 # m
+                distancia_impacto = (altura_em * 15) if vel_viento > 0 else 100 
                 factor_dispersion = max(1.0, vel_viento * 0.5)
                 concentracion_max = (tasa_em * 1000) / (factor_dispersion * altura_em)
                 
-                # Generar puntos geográficos para el mapa de calor de la pluma
                 puntos_pluma = [{"Latitud": lat_em, "Longitud": lon_em, "Concentracion": concentracion_max}]
                 pasos = 15
-                dist_max = vel_viento * 0.02 # Escala de grados de lat/lon
+                dist_max = vel_viento * 0.02 
                 
                 for i in range(1, pasos + 1):
                     frac = i / pasos
@@ -464,20 +792,20 @@ with tab5:
                     st.success(f"**VEREDICTO DE RIESGO: BAJO.** La concentración estimada a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, manteniéndose bajo el límite legal de {limite_legal} µg/m³ para {contam_em}.")
 
                 st.markdown("#### Análisis de Impacto Comunitario")
-                st.write(f"Dadas las condiciones meteorológicas actuales ({temp_actual} °C y vientos de {vel_viento} km/h), la pluma de contaminación de **{contam_em}** se desplazará hacia el **{int(angulo_viaje)}°**. Las áreas pobladas o ecosistemas ubicados a un radio de **{distancia_impacto} metros** en esta dirección recibirán el mayor impacto de material particulado/gases.")
+                st.write(f"Dadas las condiciones meteorológicas actuales ({temp_actual} °C y vientos de {vel_viento} km/h), la pluma de contaminación de **{contam_em}** se desplazará hacia el **{int(angulo_viaje)}°**. Las áreas pobladas o ecosistemas ubicados a un radio de **{distancia_impacto} metros** en esta dirección recibirán el mayor impacto de material particulado o gases.")
 
                 st.markdown("#### Plan de Acción Inmediato Propuesto")
                 if contam_em in ["MP10", "MP2.5"]:
                     st.markdown("""
                     1. **Ingeniería:** Activar de inmediato los sistemas de supresión de polvo y verificar el diferencial de presión en los filtros de mangas de la planta.
-                    2. **Operacional:** Reducir la tasa de alimentación (molienda/chancado) en un 30% hasta que cambien las condiciones de ventilación atmosférica.
-                    3. **Logística:** Aumentar la frecuencia de los camiones aljibe para la humectación de caminos no pavimentados en el perímetro industrial.
+                    2. **Operacional:** Reducir la tasa de alimentación en un 30% hasta que mejore la ventilación atmosférica.
+                    3. **Logística:** Aumentar la frecuencia de los camiones aljibe para la humectación de caminos.
                     """)
                 else:
                     st.markdown("""
-                    1. **Ingeniería:** Incrementar la inyección de reactivos alcalinos en el sistema de desulfuración (Scrubber) para neutralizar los gases ácidos.
+                    1. **Ingeniería:** Incrementar la inyección de reactivos alcalinos en el sistema de desulfuración para neutralizar los gases ácidos.
                     2. **Operacional:** Evaluar el cambio temporal a una mezcla de combustible con menor porcentaje de azufre durante las próximas 12 horas.
-                    3. **Monitoreo:** Desplegar una brigada de medición portátil de gases en el perímetro proyectado por la pluma para validación física.
+                    3. **Monitoreo:** Desplegar una brigada de medición portátil de gases en el perímetro proyectado.
                     """)
                 
                 st.markdown("</div>", unsafe_allow_html=True)
