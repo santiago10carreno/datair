@@ -21,10 +21,10 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* OCULTAMOS SOLO LA BASURA, SIN TOCAR EL MECANISMO DE LA BARRA LATERAL */
-        .stAppDeployButton, [data-testid="stToolbar"], [data-testid="stDecoration"] {
-            display: none !important;
-        }
+        /* 
+           NO HAY NINGÚN CÓDIGO AQUÍ PARA OCULTAR LA BARRA. 
+           STREAMLIT ESTÁ EN SU ESTADO NATURAL Y EL BOTÓN NO DESAPARECERÁ.
+        */
 
         /* DISEÑO DE LAS MÉTRICAS (Alineación perfecta) */
         div[data-testid="metric-container"] {
