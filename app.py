@@ -20,18 +20,22 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* OCULTAR ELEMENTOS BASURA (PERO DEJAMOS LA BARRA INTACTA PARA EL BOTÓN NATIVO) */
-        #MainMenu {visibility: hidden !important;} 
-        footer {visibility: hidden !important;} 
+        /* 1. MAGIA PARA LA BARRA LATERAL: Ocultamos el header pero revivimos el botón */
+        header { visibility: hidden !important; }
+        [data-testid="collapsedControl"] { 
+            visibility: visible !important; 
+            background-color: #1A1C1E !important;
+            border: 1px solid #2D3139 !important;
+            border-radius: 5px !important;
+        }
         
-        /* Ocultamos especificamente como francotirador la línea de colores y botones de la derecha */
-        [data-testid="stDecoration"], 
-        [data-testid="stToolbar"], 
-        .stAppDeployButton {
+        /* 2. Ocultar basura restante */
+        #MainMenu, footer, [data-testid="stToolbar"], .stAppDeployButton {
             display: none !important;
+            visibility: hidden !important;
         }
 
-        /* DISEÑO DE CAJAS DE MÉTRICAS */
+        /* 3. DISEÑO DE CAJAS DE MÉTRICAS */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -45,12 +49,8 @@ st.markdown("""
             width: 100% !important;
         }
         
-        /* FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
-        [data-testid="stMetricLabel"] {
-            text-align: left !important;
-            width: 100% !important;
-        }
-        [data-testid="stMetricValue"] {
+        /* 4. FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
+        [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
         }
@@ -686,7 +686,7 @@ with tab5:
         st.plotly_chart(fig_viento, use_container_width=True)
 
 # ------------------------------------------
-# TAB 6: CENTRO DE ALERTAS Y SAT
+# TAB 6: CENTRO DE ALERTAS Y SAT (CON GRÁFICOS PASADOS Y FUTUROS)
 # ------------------------------------------
 with tab6:
     st.subheader("Sala de Control Central")
