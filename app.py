@@ -91,7 +91,7 @@ var_api = configuracion[contaminante_elegido]["api"]
 limite_actual = configuracion[contaminante_elegido]["limite"]
 
 # ==========================================
-# 3. EXTRACCIÓN ASÍNCRONA Y VECTORES DE VIENTO
+# 3. EXTRACCIÓN ASÍNCRONA
 # ==========================================
 def obtener_datos_estacion_individual(args):
     lat, lon, variable, region, comuna, sector = args
@@ -236,7 +236,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 ])
 
 # ------------------------------------------
-# TAB 1 A 5 MANTENIDOS INTACTOS
+# TAB 1 A 5 (Código estándar)
 # ------------------------------------------
 with tab1:
     st.subheader("Mapa Geografico en Tiempo Real")
@@ -274,7 +274,6 @@ with tab1:
 
         df_region_completo = pd.DataFrame(lista_promedios_comunas).reset_index().rename(columns={'index': 'Fecha y Hora'})
         df_comuna_completo = pd.DataFrame(datos_sectores_comuna).reset_index().rename(columns={'index': 'Fecha y Hora'})
-
         df_region_historico = df_region_completo[df_region_completo['Fecha y Hora'] <= ahora]
         df_comuna_historico = df_comuna_completo[df_comuna_completo['Fecha y Hora'] <= ahora]
 
@@ -311,14 +310,12 @@ with tab2:
         fig_region_pred = px.line(df_region_proy, x='Fecha y Hora', y=df_region_proy.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Comuna'})
         fig_region_pred.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
         fig_region_pred.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-        fig_region_pred.add_vrect(x0=ahora, x1=df_region_proy['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
         st.plotly_chart(fig_region_pred, use_container_width=True)
 
         st.subheader(f"Modelo Predictivo Comunal: {com_proy}")
         fig_comuna_pred = px.line(df_comuna_proy, x='Fecha y Hora', y=df_comuna_proy.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Estacion'})
         fig_comuna_pred.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
         fig_comuna_pred.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-        fig_comuna_pred.add_vrect(x0=ahora, x1=df_comuna_proy['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
         st.plotly_chart(fig_comuna_pred, use_container_width=True)
 
 with tab3:
@@ -425,24 +422,22 @@ with tab5:
             st.metric(f"☁️ {contaminante_elegido}", val_c_str)
 
         st.divider()
-        st.markdown("**Evolucion de la Temperatura (Riesgo de Inversion Termica)**")
         fig_temp = px.line(df_met, x='Fecha y Hora', y='Temperatura (°C)')
         fig_temp.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
         fig_temp.update_traces(line_color="#FFA500")
         st.plotly_chart(fig_temp, use_container_width=True)
 
-        st.markdown("**Evolucion de la Velocidad del Viento (Capacidad de Dispersion)**")
         fig_viento = px.line(df_met, x='Fecha y Hora', y='Velocidad Viento (km/h)')
         fig_viento.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
         fig_viento.update_traces(line_color="#00CED1")
         st.plotly_chart(fig_viento, use_container_width=True)
 
 # ------------------------------------------
-# TAB 6: MAPA DE DISPERSIÓN CON ADVECCIÓN
+# TAB 6: MALLA ESPACIAL (CONO DE DISPERSIÓN 2D)
 # ------------------------------------------
 with tab6:
-    st.subheader("Modelamiento de Dispersion de Contaminantes")
-    st.write("Aproximacion numerica que simula la adveccion de los gases calculando el impacto en los alrededores segun el vector de viento actual.")
+    st.subheader("Modelamiento Espacial de Dispersion Gaussiana")
+    st.write("Resolución de matriz 2D. Se generan múltiples puntos matemáticos para formar la pluma geométrica del gas. Mantiene escala representativa sin importar el zoom de la cámara.")
     
     if not df_mapa.empty:
         df_vectores = obtener_viento_batch(df_mapa.copy())
@@ -455,32 +450,51 @@ with tab6:
             spd = row.get('WindSpd', 0)
             dir_viento = row.get('WindDir', 0)
             
+            # Conservar punto central de la estación
             puntos_pluma.append(row.to_dict())
             
+            # MATEMÁTICA DEL CONO DE DISPERSIÓN
             if spd > 1:
-                # El gas viaja en direccion opuesta a donde viene el viento
                 angulo_viaje = (dir_viento + 180) % 360
-                angulo_rad = math.radians(90 - angulo_viaje)
+                apertura = 45 # Abertura del abanico (+- 45 grados)
+            else:
+                angulo_viaje = 0
+                apertura = 180 # Círculo completo (isotrópico) si no hay viento
                 
-                pasos = 6
-                longitud_pluma = spd * 0.0015 # Factor de expansion 
+            pasos_radio = 10
+            pasos_angulo = 15
+            
+            # Distancia física de impacto: 1 grado latitud son aprox 111km.
+            # spd*0.005 -> Viento de 10km/h abarca un radio de ~0.08 grados (~9 km reales)
+            radio_maximo = 0.03 + (spd * 0.005) 
+            
+            for i_r in range(1, pasos_radio + 1):
+                r = radio_maximo * (i_r / pasos_radio)
+                decaimiento_dist = math.exp(-3 * (r / radio_maximo)) # Exponencial longitudinal
                 
-                for i in range(1, pasos + 1):
-                    frac = i / pasos
-                    dist = longitud_pluma * frac
+                for i_a in range(pasos_angulo):
+                    if spd > 1:
+                        offset_ang = -apertura + (2 * apertura * i_a / (pasos_angulo - 1))
+                        decaimiento_lat = math.exp(-2 * (abs(offset_ang) / apertura)**2) # Exponencial lateral
+                    else:
+                        offset_ang = i_a * (360 / pasos_angulo)
+                        decaimiento_lat = 1
+                        
+                    ang_actual = (angulo_viaje + offset_ang) % 360
+                    ang_rad = math.radians(90 - ang_actual)
                     
-                    d_lat = dist * math.sin(angulo_rad)
-                    d_lon = dist * math.cos(angulo_rad) / math.cos(math.radians(lat))
+                    c_fantasma = c * decaimiento_dist * decaimiento_lat
                     
-                    # Decaimiento exponencial desde la fuente
-                    c_fantasma = c * math.exp(-3 * frac) 
-                    
+                    # Cortamos el cálculo si el gas se vuelve imperceptible
                     if c_fantasma > (limite_actual * 0.05):
+                        d_lat = r * math.sin(ang_rad)
+                        d_lon = r * math.cos(ang_rad) / math.cos(math.radians(lat))
+                        
                         nuevo_punto = row.to_dict()
                         nuevo_punto['Latitud'] = lat + d_lat
                         nuevo_punto['Longitud'] = lon + d_lon
                         nuevo_punto['Concentracion'] = c_fantasma
-                        nuevo_punto['Estacion'] = row['Estacion'] + " (Pluma)"
+                        nuevo_punto['Estacion'] = row['Estacion'] + " (Malla Modela)"
                         puntos_pluma.append(nuevo_punto)
         
         df_pluma = pd.DataFrame(puntos_pluma)
@@ -495,12 +509,14 @@ with tab6:
         else:
             lat_centro, lon_centro = -35.0, -71.0
 
+        # Al usar una matriz densa, bajamos drásticamente el 'radius' visual de Plotly.
+        # Ahora el tamaño de la pluma depende de los kilómetros reales calculados arriba.
         fig_heat = px.density_mapbox(
             df_pluma, 
             lat="Latitud", 
             lon="Longitud", 
             z="Concentracion",
-            radius=45,         
+            radius=15, # <--- Corregido para que no sature la pantalla
             center={"lat": lat_centro, "lon": lon_centro}, 
             zoom=8,
             mapbox_style="carto-darkmatter", 
