@@ -21,9 +21,9 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* CÓDIGO CSS LIMPIO: La flecha de la barra lateral funcionará de manera 100% natural */
+        /* CÓDIGO CSS LIMPIO: La flecha de la barra lateral funcionará de manera natural */
         
-        /* ANCHO DE LA BARRA LATERAL (Más angosta y elegante) */
+        /* ANCHO DE LA BARRA LATERAL */
         [data-testid="stSidebar"] {
             min-width: 280px !important;
             max-width: 330px !important;
@@ -69,7 +69,7 @@ st.markdown("""
             border: 1px solid #3A3F47;
             border-radius: 8px;
             padding: 25px;
-            margin-top: 20px;
+            height: 100%;
             border-top: 4px solid #8F3F97; 
         }
     </style>
@@ -78,10 +78,11 @@ st.markdown("""
 # ==========================================
 # 1. BASE DE DATOS GEOGRÁFICA Y HARDWARE
 # ==========================================
+# La Región Metropolitana ahora es la primera para ser la vista predeterminada
 DICCIONARIO_ZONAS = {
+    "Región Metropolitana": {"Santiago Centro": {"Parque O'Higgins": (-33.4641, -70.6607)}, "Independencia": {"Independencia": (-33.4150, -70.6528)}, "Pudahuel": {"Pudahuel": (-33.4326, -70.7818)}, "Quilicura": {"Quilicura": (-33.3663, -70.7351)}, "Las Condes": {"Las Condes": (-33.3769, -70.5239)}, "Cerrillos": {"Cerrillos": (-33.4939, -70.7161)}, "El Bosque": {"El Bosque": (-33.5350, -70.6766)}, "Cerro Navia": {"Cerro Navia": (-33.4334, -70.7348)}, "Puente Alto": {"Puente Alto": (-33.6163, -70.5831)}, "Talagante": {"Talagante": (-33.6669, -70.9275)}},
     "Región de Antofagasta": {"Antofagasta": {"Antofagasta (Centro)": (-23.6500, -70.4000)}, "Calama": {"Calama": (-22.4500, -68.9300)}},
     "Región de Valparaíso": {"Valparaíso": {"Valparaíso": (-33.0500, -71.6200)}, "Viña del Mar": {"Viña del Mar": (-33.0200, -71.5500)}, "Quintero": {"Quintero (Centro)": (-32.7800, -71.5300), "Loncura": (-32.7900, -71.5200)}, "Puchuncaví": {"Puchuncaví": (-32.7300, -71.4100), "Las Ventanas": (-32.7500, -71.4800)}},
-    "Región Metropolitana": {"Santiago Centro": {"Parque O'Higgins": (-33.4641, -70.6607)}, "Independencia": {"Independencia": (-33.4150, -70.6528)}, "Pudahuel": {"Pudahuel": (-33.4326, -70.7818)}, "Quilicura": {"Quilicura": (-33.3663, -70.7351)}, "Las Condes": {"Las Condes": (-33.3769, -70.5239)}, "Cerrillos": {"Cerrillos": (-33.4939, -70.7161)}, "El Bosque": {"El Bosque": (-33.5350, -70.6766)}, "Cerro Navia": {"Cerro Navia": (-33.4334, -70.7348)}, "Puente Alto": {"Puente Alto": (-33.6163, -70.5831)}, "Talagante": {"Talagante": (-33.6669, -70.9275)}},
     "Región de O'Higgins": {"Rancagua": {"Rancagua (Centro)": (-34.1708, -70.7441), "Rancagua 2 (Norte)": (-34.1522, -70.7305)}, "Rengo": {"Rengo (Centro)": (-34.4091, -70.8591)}, "San Fernando": {"San Fernando": (-34.5847, -70.9880)}, "Machalí": {"Machalí": (-34.1816, -70.6558)}},
     "Región del Maule": {"Talca": {"Talca (Centro)": (-35.4300, -71.6700), "La Florida": (-35.4500, -71.6800)}, "Curicó": {"Curicó": (-34.9800, -71.2300)}},
     "Región del Biobío": {"Concepción": {"Concepción": (-36.8300, -73.0500)}, "Talcahuano": {"Talcahuano": (-36.7200, -73.1200)}, "Coronel": {"Coronel Norte": (-37.0100, -73.1400), "Coronel Sur": (-37.0400, -73.1500)}, "Los Ángeles": {"Los Ángeles": (-37.4700, -72.3500)}},
@@ -400,8 +401,8 @@ if modulo_activo == "Dashboard":
                 df_mapa, lat="Latitud", lon="Longitud", hover_name="Estacion", 
                 hover_data={"Latitud": False, "Longitud": False, "Region": True, "Comuna": True, "Concentracion": True, "Estado": True, "Tamaño": False, "Color": False},
                 color="Estado", color_discrete_map=PALETA_ICAP,
-                size="Tamaño", zoom=7 if fuente_datos == "SINCA (Oficial - Piloto)" else 4, 
-                center={"lat": -34.3, "lon": -70.8} if fuente_datos == "SINCA (Oficial - Piloto)" else {"lat": -35.0, "lon": -71.0}, 
+                size="Tamaño", zoom=7 if fuente_datos == "SINCA (Oficial - Piloto)" else 8, 
+                center={"lat": -34.3, "lon": -70.8} if fuente_datos == "SINCA (Oficial - Piloto)" else {"lat": -33.45, "lon": -70.65}, 
                 height=500, category_orders={"Estado": ["Bueno", "Regular", "Alerta", "Preemergencia", "Emergencia"]}
             )
             fig_mapa.update_layout(mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0})
@@ -439,7 +440,7 @@ if modulo_activo == "Dashboard":
             regiones_disp = list(df_vectores['Region'].unique())
             reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, key="heatmap_region")
             df_region_mapa = df_vectores[df_vectores['Region'] == reg_mapa]
-            lat_centro, lon_centro = (df_region_mapa['Latitud'].mean(), df_region_mapa['Longitud'].mean()) if not df_region_mapa.empty else (-35.0, -71.0)
+            lat_centro, lon_centro = (df_region_mapa['Latitud'].mean(), df_region_mapa['Longitud'].mean()) if not df_region_mapa.empty else (-33.45, -70.65)
 
             fig_heat = px.density_mapbox(
                 df_pluma, lat="Latitud", lon="Longitud", z="Concentracion",
@@ -648,13 +649,17 @@ elif modulo_activo == "Simulador":
     with st.container():
         col_param1, col_param2, col_param3 = st.columns(3)
         with col_param1:
-            lat_em = st.number_input("Latitud de Descarga", value=-34.1708, format="%.4f")
-            lon_em = st.number_input("Longitud de Descarga", value=-70.7441, format="%.4f")
+            lat_em = st.number_input("Latitud de Descarga", value=-33.4641, format="%.4f")
         with col_param2:
-            tasa_em = st.number_input("Emisión (kg/h)", min_value=0.1, value=50.0, step=1.0)
-            altura_em = st.number_input("Altura Chimenea (m)", min_value=1.0, value=30.0, step=1.0)
+            lon_em = st.number_input("Longitud de Descarga", value=-70.6607, format="%.4f")
         with col_param3:
-            st.markdown("<br><br>", unsafe_allow_html=True)
+            tasa_em = st.number_input("Emisión (kg/h)", min_value=0.1, value=50.0, step=1.0)
+            
+        col_param4, col_param5, col_param6 = st.columns(3)
+        with col_param4:
+            altura_em = st.number_input("Altura Chimenea (m)", min_value=1.0, value=30.0, step=1.0)
+        with col_param5:
+            st.markdown("<br>", unsafe_allow_html=True)
             btn_simular = st.button("Ejecutar Simulación AI", type="primary", use_container_width=True)
 
     st.divider()
