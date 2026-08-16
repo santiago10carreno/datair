@@ -21,34 +21,53 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* 1. DOMAR LA FLECHA DE LA BARRA LATERAL (Solución Definitiva) */
-        /* Congelamos la visibilidad del contenedor principal (Header) */
-        header[data-testid="stHeader"], .stAppHeader {
-            background-color: transparent !important;
+        /* ========================================================
+           1. BLOQUEO DEL TEMPORIZADOR FANTASMA (AUTO-HIDE)
+           Obligamos a la barra superior a quedarse estática al 100%
+           de visibilidad, matando la animación nativa de Streamlit.
+        ======================================================== */
+        header[data-testid="stHeader"] {
             opacity: 1 !important;
             visibility: visible !important;
-            pointer-events: none !important; /* Deja que los clics pasen a la app */
-            transition: none !important;
-            transform: none !important;
+            transform: translateY(0px) !important; 
+            transition: none !important; /* Apaga la animación de desaparición */
+            background-color: transparent !important;
+            pointer-events: none !important; /* Deja pasar el click al mapa */
         }
-        /* Le devolvemos el poder de clic y visibilidad permanente SOLO a la flecha */
+
+        /* ========================================================
+           2. FRANCOTIRADOR A LA BASURA DE LA DERECHA
+           stToolbar contiene el logo de Github, Deploy y el menú.
+           Lo aniquilamos de raíz para que ni siquiera intente cargar.
+        ======================================================== */
+        [data-testid="stToolbar"], 
+        .stAppDeployButton, 
+        [data-testid="stDecoration"] {
+            display: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+        }
+
+        /* ========================================================
+           3. BLINDAJE DE LA FLECHA DE LA BARRA LATERAL
+           La atornillamos a la pantalla, visible y clickeable.
+        ======================================================== */
         [data-testid="collapsedControl"] {
             opacity: 1 !important;
             visibility: visible !important;
-            pointer-events: auto !important; /* Activa el clic */
+            pointer-events: auto !important; /* Le devolvemos el poder de clic */
             background-color: #1A1C1E !important;
             border: 1px solid #3A3F47 !important;
             border-radius: 6px !important;
             color: #E2E8F0 !important;
             z-index: 999999 !important;
+            transition: none !important;
         }
 
-        /* 2. OCULTAMOS SOLO LA BASURA */
-        .stAppDeployButton, [data-testid="stToolbar"], [data-testid="stDecoration"] {
-            display: none !important;
-        }
-
-        /* 3. DISEÑO DE LAS MÉTRICAS */
+        /* ========================================================
+           4. DISEÑO CORPORATIVO (Métricas y Textos)
+        ======================================================== */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -63,7 +82,6 @@ st.markdown("""
             border-left: 4px solid #4A90E2; 
         }
         
-        /* 4. FIX PARA TEXTOS CORTADOS */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
@@ -82,7 +100,6 @@ st.markdown("""
             font-size: 1.05rem; font-weight: 600;
         }
         
-        /* Estilo para el reporte de IA */
         .ai-report-box {
             background-color: #141618;
             border: 1px solid #3A3F47;
