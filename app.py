@@ -265,6 +265,21 @@ with col1: st.metric(label="Promedio Pais Actual", value=f"{promedio_nacional:.1
 with col2: st.metric(label="Estado General", value=estado_pais)
 with col3: st.metric(label="Sectores en Riesgo (ICAP)", value=f"{estaciones_criticas} de {total_hardware_valido}")
 
+# --- NUEVO: DRILL-DOWN DE SECTORES EN RIESGO ---
+if estaciones_criticas > 0:
+    with st.expander("🚨 Ver detalle de los Sectores en Riesgo actuales"):
+        # Filtramos solo las estaciones en peligro
+        df_riesgo = df_mapa[df_mapa["Estado"].isin(["Alerta", "Preemergencia", "Emergencia"])].copy()
+        # Ordenamos de la más contaminada a la menos contaminada
+        df_riesgo = df_riesgo.sort_values(by="Concentracion", ascending=False).reset_index(drop=True)
+        
+        # Mostramos la tabla limpia sin coordenadas
+        st.dataframe(
+            df_riesgo[["Region", "Comuna", "Estacion", "Concentracion", "Estado"]],
+            use_container_width=True,
+            hide_index=True
+        )
+
 st.divider()
 
 st.markdown("""
