@@ -21,16 +21,22 @@ st.markdown("""
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
         /* ---------------------------------------------------
-           HACK DE MARCA BLANCA: Ocultar branding de Streamlit
+           HACK DE MARCA BLANCA "NIVEL DIOS" (Fuerza Bruta)
            --------------------------------------------------- */
-        #MainMenu {visibility: hidden;} /* Oculta el menú de los tres puntos */
-        footer {visibility: hidden;} /* Oculta el pie de página */
-        header {visibility: hidden;} /* Oculta la franja superior de Streamlit */
+        #MainMenu {display: none !important; visibility: hidden !important;} 
+        footer {display: none !important; visibility: hidden !important;} 
+        header {display: none !important; visibility: hidden !important;} 
         
-        /* Oculta la marca de agua flotante en celulares ("Hosted with Streamlit") */
-        .viewerBadge_container { display: none !important; }
-        .viewerBadge_link { display: none !important; }
-        [data-testid="stDecoration"] { display: none !important; }
+        /* Matar clases de visores y barras flotantes de versiones recientes */
+        [data-testid="stDecoration"] {display: none !important;}
+        [data-testid="stToolbar"] {display: none !important;}
+        [data-testid="stStatusWidget"] {display: none !important;}
+        [data-testid="manage-app-button"] {display: none !important;}
+        .viewerBadge_container {display: none !important;}
+        .viewerBadge_link {display: none !important;}
+        
+        /* RASTREAR Y DESTRUIR: Oculta CUALQUIER elemento en toda la página que tenga un link a Streamlit */
+        a[href^="https://streamlit.io"] {display: none !important;}
         /* --------------------------------------------------- */
 
         div[data-testid="metric-container"] {
@@ -284,10 +290,8 @@ with tab1:
             if spd > 1:
                 angulo_viaje = (dir_viento + 180) % 360
                 angulo_rad = math.radians(90 - angulo_viaje)
-                
                 pasos = 8
                 dist_max = spd * 0.015 
-                
                 for i in range(1, pasos + 1):
                     frac = i / pasos
                     dist = dist_max * frac
@@ -295,7 +299,6 @@ with tab1:
                     d_lon = dist * math.cos(angulo_rad) / math.cos(math.radians(lat))
                     
                     c_fantasma = c * (1 - frac)**1.5 
-                    
                     if c_fantasma > (limite_actual * 0.05):
                         nuevo_punto = row.to_dict()
                         nuevo_punto['Latitud'] = lat + d_lat
@@ -305,7 +308,6 @@ with tab1:
                         puntos_pluma.append(nuevo_punto)
         
         df_pluma = pd.DataFrame(puntos_pluma)
-
         regiones_disp = list(df_vectores['Region'].unique())
         reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, index=0 if "Región Metropolitana" not in regiones_disp else regiones_disp.index("Región Metropolitana"), key="heatmap_region")
         
@@ -317,22 +319,15 @@ with tab1:
             lat_centro, lon_centro = -35.0, -71.0
 
         fig_heat = px.density_mapbox(
-            df_pluma, 
-            lat="Latitud", 
-            lon="Longitud", 
-            z="Concentracion",
-            radius=60, 
-            center={"lat": lat_centro, "lon": lon_centro}, 
-            zoom=9,
-            mapbox_style="carto-darkmatter", 
-            color_continuous_scale="Inferno", 
-            opacity=0.6, 
-            hover_name="Estacion"
+            df_pluma, lat="Latitud", lon="Longitud", z="Concentracion",
+            radius=60, center={"lat": lat_centro, "lon": lon_centro}, 
+            zoom=9, mapbox_style="carto-darkmatter", color_continuous_scale="Inferno", 
+            opacity=0.6, hover_name="Estacion"
         )
         fig_heat.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
         st.plotly_chart(fig_heat, use_container_width=True)
     else:
-        st.warning(f"No hay suficientes datos de hardware para modelar la dispersion de {contaminante_elegido}.")
+        st.warning(f"No hay suficientes datos para modelar la dispersion de {contaminante_elegido}.")
 
     st.divider()
     
