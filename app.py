@@ -9,6 +9,7 @@ from openpyxl.formatting.rule import CellIsRule
 from openpyxl.chart import LineChart, Reference
 import concurrent.futures
 import math
+import numpy as np
 
 # ==========================================
 # CONFIGURACIÓN Y ESTILOS CORPORATIVOS
@@ -160,7 +161,6 @@ def obtener_viento_batch(df):
     lats = ",".join(df['Latitud'].astype(str))
     lons = ",".join(df['Longitud'].astype(str))
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&current=wind_speed_10m,wind_direction_10m&timezone=America%2FSantiago"
-    
     try:
         res = requests.get(url, timeout=5)
         data = res.json()
@@ -433,98 +433,121 @@ with tab5:
         st.plotly_chart(fig_viento, use_container_width=True)
 
 # ------------------------------------------
-# TAB 6: MALLA ESPACIAL (CONO DE DISPERSIÓN 2D)
+# TAB 6: MALLA DE DISPERSIÓN (IDW ADVECTIVO)
 # ------------------------------------------
 with tab6:
-    st.subheader("Modelamiento Espacial de Dispersion Gaussiana")
-    st.write("Resolución de matriz 2D. Se generan múltiples puntos matemáticos para formar la pluma geométrica del gas. Mantiene escala representativa sin importar el zoom de la cámara.")
+    st.subheader("Modelo Avanzado de Dispersion (Malla Advectiva Continua)")
+    st.write("Resolucion de matriz espacial 2D. Cruza los datos de multiples estaciones y aplica ecuaciones de adveccion para difuminar la pluma suavemente a kilometros de distancia, manteniendo la escala real sin importar el zoom de la camara.")
     
     if not df_mapa.empty:
         df_vectores = obtener_viento_batch(df_mapa.copy())
         
-        puntos_pluma = []
-        for _, row in df_vectores.iterrows():
-            lat = row['Latitud']
-            lon = row['Longitud']
-            c = row['Concentracion']
-            spd = row.get('WindSpd', 0)
-            dir_viento = row.get('WindDir', 0)
-            
-            # Conservar punto central de la estación
-            puntos_pluma.append(row.to_dict())
-            
-            # MATEMÁTICA DEL CONO DE DISPERSIÓN
-            if spd > 1:
-                angulo_viaje = (dir_viento + 180) % 360
-                apertura = 45 # Abertura del abanico (+- 45 grados)
-            else:
-                angulo_viaje = 0
-                apertura = 180 # Círculo completo (isotrópico) si no hay viento
-                
-            pasos_radio = 10
-            pasos_angulo = 15
-            
-            # Distancia física de impacto: 1 grado latitud son aprox 111km.
-            # spd*0.005 -> Viento de 10km/h abarca un radio de ~0.08 grados (~9 km reales)
-            radio_maximo = 0.03 + (spd * 0.005) 
-            
-            for i_r in range(1, pasos_radio + 1):
-                r = radio_maximo * (i_r / pasos_radio)
-                decaimiento_dist = math.exp(-3 * (r / radio_maximo)) # Exponencial longitudinal
-                
-                for i_a in range(pasos_angulo):
-                    if spd > 1:
-                        offset_ang = -apertura + (2 * apertura * i_a / (pasos_angulo - 1))
-                        decaimiento_lat = math.exp(-2 * (abs(offset_ang) / apertura)**2) # Exponencial lateral
-                    else:
-                        offset_ang = i_a * (360 / pasos_angulo)
-                        decaimiento_lat = 1
-                        
-                    ang_actual = (angulo_viaje + offset_ang) % 360
-                    ang_rad = math.radians(90 - ang_actual)
-                    
-                    c_fantasma = c * decaimiento_dist * decaimiento_lat
-                    
-                    # Cortamos el cálculo si el gas se vuelve imperceptible
-                    if c_fantasma > (limite_actual * 0.05):
-                        d_lat = r * math.sin(ang_rad)
-                        d_lon = r * math.cos(ang_rad) / math.cos(math.radians(lat))
-                        
-                        nuevo_punto = row.to_dict()
-                        nuevo_punto['Latitud'] = lat + d_lat
-                        nuevo_punto['Longitud'] = lon + d_lon
-                        nuevo_punto['Concentracion'] = c_fantasma
-                        nuevo_punto['Estacion'] = row['Estacion'] + " (Malla Modela)"
-                        puntos_pluma.append(nuevo_punto)
-        
-        df_pluma = pd.DataFrame(puntos_pluma)
-
         regiones_disp = list(df_vectores['Region'].unique())
-        reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, index=0 if "Región Metropolitana" not in regiones_disp else regiones_disp.index("Región Metropolitana"))
+        reg_mapa = st.selectbox("Analizar dispersion en la Región:", regiones_disp, index=0 if "Región Metropolitana" not in regiones_disp else regiones_disp.index("Región Metropolitana"))
         
         df_region_mapa = df_vectores[df_vectores['Region'] == reg_mapa]
+        
         if not df_region_mapa.empty:
-            lat_centro = df_region_mapa['Latitud'].mean()
-            lon_centro = df_region_mapa['Longitud'].mean()
+            lats = df_region_mapa['Latitud'].values
+            lons = df_region_mapa['Longitud'].values
+            vals = df_region_mapa['Concentracion'].values
+            spds = df_region_mapa['WindSpd'].values
+            dirs = df_region_mapa['WindDir'].values
+            
+            # 1. Definir los limites fisicos de la Malla (Grid) ampliando ~30km extra
+            lat_min, lat_max = lats.min() - 0.35, lats.max() + 0.35
+            lon_min, lon_max = lons.min() - 0.40, lons.max() + 0.40
+            
+            # Si hay solo una estacion, el min y max seran iguales, agregamos padding manual
+            if lat_min == lat_max:
+                lat_min -= 0.35; lat_max += 0.35
+                lon_min -= 0.40; lon_max += 0.40
+            
+            # Creamos una malla ultra densa de 2000 puntos para difuminado perfecto
+            grid_lats = np.linspace(lat_min, lat_max, 45)
+            grid_lons = np.linspace(lon_min, lon_max, 45)
+            
+            puntos_pluma = []
+            
+            # W_bg (Background Weight): Determina cuan lejos llega el gas. 0.25 grados son ~28 km reales.
+            W_bg = 1.0 / (0.25**2) 
+            
+            # 2. Motor Matematico de Ponderacion Inversa a la Distancia (IDW)
+            for glat in grid_lats:
+                for glon in grid_lons:
+                    sum_w = 0
+                    sum_cw = 0
+                    
+                    for i in range(len(lats)):
+                        lat_i = lats[i]
+                        lon_i = lons[i]
+                        c_i = vals[i]
+                        spd_i = spds[i]
+                        dir_i = dirs[i]
+                        
+                        dx = (glon - lon_i) * math.cos(math.radians(lat_i))
+                        dy = glat - lat_i
+                        
+                        # Direccion hacia donde viaja el gas (+180 grados del origen del viento)
+                        alpha_math = math.radians(270 - dir_i)
+                        
+                        # Rotar el eje de coordenadas para alinear con el viento
+                        x_rot = dx * math.cos(alpha_math) + dy * math.sin(alpha_math)
+                        y_rot = -dx * math.sin(alpha_math) + dy * math.cos(alpha_math)
+                        
+                        # Factor de adveccion (Estiramiento geografico)
+                        c_wind = 0.08
+                        if x_rot > 0: # El viento empuja hacia aca (Downwind)
+                            x_eff = x_rot / (1 + c_wind * spd_i)
+                            y_eff = y_rot * (1 + c_wind * spd_i * 0.5)
+                        else: # En contra del viento (Upwind, se aplasta)
+                            x_eff = x_rot * (1 + c_wind * spd_i * 2)
+                            y_eff = y_rot * (1 + c_wind * spd_i * 0.5)
+                            
+                        d_eff_sq = x_eff**2 + y_eff**2
+                        
+                        # Peso de esta estacion especifica sobre este punto del mapa
+                        w_i = 1.0 / (d_eff_sq + 1e-5) 
+                        
+                        sum_w += w_i
+                        sum_cw += c_i * w_i
+                        
+                    # Concentracion matematica final mezclando TODAS las estaciones de la region
+                    c_grid = sum_cw / (sum_w + W_bg)
+                    
+                    if c_grid > (limite_actual * 0.05):
+                        puntos_pluma.append({
+                            'Latitud': glat, 
+                            'Longitud': glon, 
+                            'Concentracion': c_grid,
+                            'Estacion': 'Malla Matriz'
+                        })
+            
+            # Anclamos los nucleos fisicos reales
+            for _, row in df_region_mapa.iterrows():
+                puntos_pluma.append(row.to_dict())
+                
+            df_pluma = pd.DataFrame(puntos_pluma)
+            
+            # 3. Renderizado del Mapa Base
+            fig_heat = px.density_mapbox(
+                df_pluma, 
+                lat="Latitud", 
+                lon="Longitud", 
+                z="Concentracion",
+                radius=30, # Aumentado para generar una fusion total y eliminar los puntos discretos
+                center={"lat": lats.mean(), "lon": lons.mean()}, 
+                zoom=8,
+                mapbox_style="carto-darkmatter", 
+                color_continuous_scale="Inferno", 
+                opacity=0.6, 
+                hover_name="Estacion",
+                title=f"Dispersión Advectiva de {contaminante_elegido} - {reg_mapa}"
+            )
+            fig_heat.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
+            st.plotly_chart(fig_heat, use_container_width=True)
+            
         else:
-            lat_centro, lon_centro = -35.0, -71.0
-
-        # Al usar una matriz densa, bajamos drásticamente el 'radius' visual de Plotly.
-        # Ahora el tamaño de la pluma depende de los kilómetros reales calculados arriba.
-        fig_heat = px.density_mapbox(
-            df_pluma, 
-            lat="Latitud", 
-            lon="Longitud", 
-            z="Concentracion",
-            radius=15, # <--- Corregido para que no sature la pantalla
-            center={"lat": lat_centro, "lon": lon_centro}, 
-            zoom=8,
-            mapbox_style="carto-darkmatter", 
-            color_continuous_scale="Inferno", 
-            opacity=0.7, 
-            hover_name="Estacion"
-        )
-        fig_heat.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
-        st.plotly_chart(fig_heat, use_container_width=True)
+            st.warning(f"No hay estaciones de {contaminante_elegido} activas en esta region para modelar.")
     else:
         st.warning(f"No hay suficientes datos de hardware para modelar la dispersion de {contaminante_elegido}.")
