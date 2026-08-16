@@ -34,6 +34,15 @@ st.markdown("""
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
+        
+        /* FIX PARA QUE LOS TEXTOS DE LAS MÉTRICAS NO SE CORTEN CON "..." */
+        [data-testid="stMetricValue"] > div {
+            white-space: normal !important;
+            word-wrap: break-word !important;
+            font-size: 1.6rem !important;
+            line-height: 1.2 !important;
+        }
+
         h1 { color: #4A90E2 !important; font-weight: 700 !important; letter-spacing: -0.5px; }
         h2, h3 { font-weight: 600 !important; letter-spacing: -0.3px; color: #E2E8F0 !important; }
         .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
@@ -257,8 +266,8 @@ promedio_nacional = df_mapa["Concentracion"].mean() if not df_mapa.empty else 0
 estaciones_criticas = len(df_mapa[df_mapa["Estado"].isin(["Alerta", "Preemergencia", "Emergencia"])]) if not df_mapa.empty else 0
 
 if estaciones_criticas > (len(df_mapa) * 0.3): estado_pais = "Emergencia Nacional"
-elif estaciones_criticas > 0: estado_pais = "Zonas en Riesgo Activo"
-else: estado_pais = "Condiciones Optimas"
+elif estaciones_criticas > 0: estado_pais = "Zonas en Riesgo"
+else: estado_pais = "Condiciones Óptimas"
 
 col1, col2, col3 = st.columns(3)
 with col1: st.metric(label="Promedio Pais Actual", value=f"{promedio_nacional:.1f} µg/m³")
