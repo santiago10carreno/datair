@@ -20,13 +20,11 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* ANCHO DE LA BARRA LATERAL */
         [data-testid="stSidebar"] {
             min-width: 280px !important;
             max-width: 330px !important;
         }
 
-        /* DISEÑO DE LAS MÉTRICAS */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -64,7 +62,7 @@ st.markdown("""
             border: 1px solid #3A3F47;
             border-radius: 8px;
             padding: 25px;
-            height: 100%;
+            margin-top: 20px;
             border-top: 4px solid #8F3F97; 
         }
     </style>
@@ -260,6 +258,13 @@ def consultar_clima_coordenada(lat, lon):
 
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 
+# Función Helper para anclar la Región Metropolitana por defecto
+def obtener_indice_rm(opciones_lista):
+    lista = list(opciones_lista)
+    if "Región Metropolitana" in lista:
+        return lista.index("Región Metropolitana")
+    return 0
+
 # ==========================================
 # 3. BARRA LATERAL: CONFIGURACIÓN GLOBAL PERMANENTE
 # ==========================================
@@ -384,7 +389,6 @@ if modulo_activo == "Dashboard":
     </div>
     """, unsafe_allow_html=True)
 
-    # ¡AQUÍ ESTÁ LA MAGIA DE VUELTA! Restauramos el Centro de Alertas como una pestaña individual
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "Monitoreo Espacial", "Análisis Histórico", "Proyección", "Benchmarking", "Multivariable", "Meteorología Local", "Centro de Alertas (SAT)"
     ])
@@ -433,7 +437,9 @@ if modulo_activo == "Dashboard":
             
             df_pluma = pd.DataFrame(puntos_pluma)
             regiones_disp = list(df_vectores['Region'].unique())
-            reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, key="heatmap_region")
+            idx_rm_heat = obtener_indice_rm(regiones_disp)
+            reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, index=idx_rm_heat, key="heatmap_region")
+            
             df_region_mapa = df_vectores[df_vectores['Region'] == reg_mapa]
             lat_centro, lon_centro = (df_region_mapa['Latitud'].mean(), df_region_mapa['Longitud'].mean()) if not df_region_mapa.empty else (-33.45, -70.65)
 
@@ -450,8 +456,9 @@ if modulo_activo == "Dashboard":
         st.subheader("Análisis Histórico Local")
         regiones_disponibles = list(datos_totales.keys())
         if regiones_disponibles:
+            idx_rm_hist = obtener_indice_rm(regiones_disponibles)
             col_filtro1, col_filtro2 = st.columns(2)
-            with col_filtro1: region_elegida = st.selectbox("Selecciona la Región", regiones_disponibles, key="reg_hist")
+            with col_filtro1: region_elegida = st.selectbox("Selecciona la Región", regiones_disponibles, index=idx_rm_hist, key="reg_hist")
             with col_filtro2: comuna_elegida = st.selectbox("Selecciona la Comuna", list(datos_totales[region_elegida].keys()), key="com_hist")
 
             datos_sectores_comuna = {}
@@ -522,8 +529,9 @@ if modulo_activo == "Dashboard":
     with tab3:
         st.subheader("Modelos Predictivos Espaciales")
         if regiones_disponibles:
+            idx_rm_proy = obtener_indice_rm(regiones_disponibles)
             col_proy1, col_proy2 = st.columns(2)
-            with col_proy1: reg_proy = st.selectbox("Selecciona la Región", regiones_disponibles, key="reg_proy")
+            with col_proy1: reg_proy = st.selectbox("Selecciona la Región", regiones_disponibles, index=idx_rm_proy, key="reg_proy")
             with col_proy2: com_proy = st.selectbox("Selecciona la Comuna", list(datos_totales[reg_proy].keys()), key="com_proy")
 
             datos_sectores_proy, lista_promedios_proy = {}, {}
@@ -550,12 +558,16 @@ if modulo_activo == "Dashboard":
     with tab4:
         st.subheader("Benchmarking Corporativo")
         if len(datos_totales) > 0:
+            opciones_b = list(datos_totales.keys())
+            idx_rm_a = obtener_indice_rm(opciones_b)
+            idx_rm_b = 1 if len(opciones_b) > 1 else 0 
+            
             col_vs1, col_vs2 = st.columns(2)
             with col_vs1:
-                reg_a = st.selectbox("Región A", list(datos_totales.keys()), key="reg_a")
+                reg_a = st.selectbox("Región A", opciones_b, index=idx_rm_a, key="reg_a")
                 com_a = st.selectbox("Comuna A", list(datos_totales[reg_a].keys()), key="com_a")
             with col_vs2:
-                reg_b = st.selectbox("Región B", list(datos_totales.keys()), index=min(1, len(datos_totales)-1), key="reg_b")
+                reg_b = st.selectbox("Región B", opciones_b, index=idx_rm_b, key="reg_b")
                 com_b = st.selectbox("Comuna B", list(datos_totales[reg_b].keys()), key="com_b")
 
             def obtener_promedio_comuna(region, comuna):
@@ -572,8 +584,11 @@ if modulo_activo == "Dashboard":
 
     with tab5:
         st.subheader("Perfil de Estación (Multivariable)")
+        opciones_multi = list(diccionario_activo.keys())
+        idx_rm_multi = obtener_indice_rm(opciones_multi)
+        
         col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1: reg_p = st.selectbox("Región", list(diccionario_activo.keys()), key="reg_p_multi")
+        with col_p1: reg_p = st.selectbox("Región", opciones_multi, index=idx_rm_multi, key="reg_p_multi")
         with col_p2: com_p = st.selectbox("Comuna", list(diccionario_activo[reg_p].keys()), key="com_p_multi")
         with col_p3: est_p = st.selectbox("Estación", list(diccionario_activo[reg_p][com_p].keys()), key="est_p_multi")
 
@@ -603,8 +618,11 @@ if modulo_activo == "Dashboard":
 
     with tab6:
         st.subheader("Condiciones Meteorológicas Locales")
+        opciones_clima = list(diccionario_activo.keys())
+        idx_rm_clima = obtener_indice_rm(opciones_clima)
+        
         col_m1, col_m2, col_m3 = st.columns(3)
-        with col_m1: reg_m = st.selectbox("Región Clima", list(diccionario_activo.keys()), key="reg_m")
+        with col_m1: reg_m = st.selectbox("Región Clima", opciones_clima, index=idx_rm_clima, key="reg_m")
         with col_m2: com_m = st.selectbox("Comuna Clima", list(diccionario_activo[reg_m].keys()), key="com_m")
         with col_m3: est_m = st.selectbox("Estación Clima", list(diccionario_activo[reg_m][com_m].keys()), key="est_m")
 
@@ -642,7 +660,21 @@ if modulo_activo == "Dashboard":
                                 "Peak": round(serie_24h.max(), 1), "Horas Falla": (serie_24h > limite_actual).sum()
                             })
         if alertas_pasadas:
-            st.dataframe(pd.DataFrame(alertas_pasadas).sort_values("Último Peak", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True)
+            df_alertas_pasadas = pd.DataFrame(alertas_pasadas).sort_values("Último Peak", ascending=False).reset_index(drop=True)
+            st.dataframe(df_alertas_pasadas, use_container_width=True, hide_index=True)
+            
+            # Restauración de Gráficos de Infracciones Pasadas
+            for alerta in alertas_pasadas:
+                reg_graf, com_graf, est_graf = alerta["Región"], alerta["Comuna"], alerta["Estación"]
+                serie_grafico = datos_totales[reg_graf][com_graf][est_graf]
+                df_g = serie_grafico.reset_index()
+                df_g.columns = ['Fecha y Hora', 'Concentración']
+                
+                fig_pasado = px.line(df_g, x='Fecha y Hora', y='Concentración', title=f"Infracción en: {est_graf}", color_discrete_sequence=["#FF7E00"])
+                fig_pasado.add_hline(y=limite_actual, line_dash="dot", line_color="red")
+                fig_pasado.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white")
+                fig_pasado.update_xaxes(range=[ahora - pd.Timedelta(hours=48), ahora + pd.Timedelta(hours=12)])
+                st.plotly_chart(fig_pasado, use_container_width=True)
         else:
             st.success("No hay superaciones a la norma en las últimas 24 horas.")
 
@@ -663,7 +695,21 @@ if modulo_activo == "Dashboard":
                             })
         if alertas_futuras:
             st.warning(f"Se proyectan superaciones a la norma en {len(alertas_futuras)} estaciones para los próximos días.")
-            st.dataframe(pd.DataFrame(alertas_futuras).sort_values("Inicio Proyectado").reset_index(drop=True), use_container_width=True, hide_index=True)
+            df_alertas_futuras = pd.DataFrame(alertas_futuras).sort_values("Inicio Proyectado").reset_index(drop=True)
+            st.dataframe(df_alertas_futuras, use_container_width=True, hide_index=True)
+            
+            # Restauración de Gráficos de Proyección Futura
+            for alerta in alertas_futuras:
+                reg_graf, com_graf, est_graf = alerta["Región"], alerta["Comuna"], alerta["Estación"]
+                serie_grafico = datos_totales[reg_graf][com_graf][est_graf]
+                df_g = serie_grafico.reset_index()
+                df_g.columns = ['Fecha y Hora', 'Concentración']
+                
+                fig_sat = px.line(df_g, x='Fecha y Hora', y='Concentración', title=f"Proyección Crítica: {est_graf}", color_discrete_sequence=["#FF4B4B"])
+                fig_sat.add_hline(y=limite_actual, line_dash="dot", line_color="red")
+                fig_sat.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white")
+                fig_sat.update_xaxes(range=[ahora - pd.Timedelta(hours=24), ahora + pd.Timedelta(hours=72)])
+                st.plotly_chart(fig_sat, use_container_width=True)
         else:
             st.info("El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
 
