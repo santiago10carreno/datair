@@ -21,6 +21,11 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         
+        section[data-testid="stSidebar"] {
+            width: 260px !important;
+            min-width: 260px !important;
+        }
+        
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -67,7 +72,7 @@ configuracion = {
 # ==========================================
 # 2. BARRA LATERAL 
 # ==========================================
-st.sidebar.title("⚙️ Configuracion Global")
+st.sidebar.title("Configuracion Global")
 contaminante_elegido = st.sidebar.selectbox("Selecciona el Contaminante", list(configuracion.keys()))
 
 var_api = configuracion[contaminante_elegido]["api"]
@@ -108,7 +113,7 @@ datos_totales = descargar_todos_los_datos(var_api)
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 
 # ==========================================
-# 4. PREPARACIÓN DE DATOS (MAPA Y GRÁFICOS)
+# 4. PREPARACIÓN DE DATOS PARA EL MAPA
 # ==========================================
 datos_mapa = []
 for region, comunas in datos_totales.items():
@@ -149,37 +154,6 @@ with col3: st.metric(label="Estaciones Operativas", value=f"{len(df_mapa)} / {TO
 st.divider()
 
 # ==========================================
-# FILTROS GLOBALES PARA PESTAÑAS 1 Y 2
-# ==========================================
-st.subheader("Filtros de Analisis Local")
-col_filtro1, col_filtro2 = st.columns(2)
-with col_filtro1: region_elegida = st.selectbox("Selecciona la Region", list(DICCIONARIO_ZONAS.keys()), index=3)
-with col_filtro2: comuna_elegida = st.selectbox("Selecciona la Comuna", list(DICCIONARIO_ZONAS[region_elegida].keys()))
-
-# Procesamiento de datos de la zona elegida
-datos_sectores_comuna = {}
-lista_promedios_comunas = {}
-
-if region_elegida in datos_totales:
-    for comuna, sectores in datos_totales[region_elegida].items():
-        series_comuna = []
-        for sector, serie in sectores.items():
-            series_comuna.append(serie)
-            if comuna == comuna_elegida:
-                datos_sectores_comuna[sector] = serie
-        if series_comuna:
-            lista_promedios_comunas[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
-
-# Tablas completas (incluyen proyecciones)
-df_region_completo = pd.DataFrame(lista_promedios_comunas).reset_index().rename(columns={'index': 'Fecha y Hora'})
-df_comuna_completo = pd.DataFrame(datos_sectores_comuna).reset_index().rename(columns={'index': 'Fecha y Hora'})
-
-# Tablas historicas (cortadas hasta la hora actual)
-df_region_historico = df_region_completo[df_region_completo['Fecha y Hora'] <= ahora]
-df_comuna_historico = df_comuna_completo[df_comuna_completo['Fecha y Hora'] <= ahora]
-
-st.write("") # Espacio en blanco
-# ==========================================
 # SISTEMA DE PESTAÑAS (TABS)
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["Monitoreo y Analisis", "Proyeccion a 72 Hrs", "Comparador Cruzado"])
@@ -201,6 +175,31 @@ with tab1:
     
     st.divider()
     
+    st.subheader("Filtros de Analisis Local")
+    col_filtro1, col_filtro2 = st.columns(2)
+    with col_filtro1: region_elegida = st.selectbox("Selecciona la Region", list(DICCIONARIO_ZONAS.keys()), index=3)
+    with col_filtro2: comuna_elegida = st.selectbox("Selecciona la Comuna", list(DICCIONARIO_ZONAS[region_elegida].keys()))
+
+    # Procesamiento de datos locales basado en la seleccion
+    datos_sectores_comuna = {}
+    lista_promedios_comunas = {}
+
+    if region_elegida in datos_totales:
+        for comuna, sectores in datos_totales[region_elegida].items():
+            series_comuna = []
+            for sector, serie in sectores.items():
+                series_comuna.append(serie)
+                if comuna == comuna_elegida:
+                    datos_sectores_comuna[sector] = serie
+            if series_comuna:
+                lista_promedios_comunas[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
+
+    df_region_completo = pd.DataFrame(lista_promedios_comunas).reset_index().rename(columns={'index': 'Fecha y Hora'})
+    df_comuna_completo = pd.DataFrame(datos_sectores_comuna).reset_index().rename(columns={'index': 'Fecha y Hora'})
+
+    df_region_historico = df_region_completo[df_region_completo['Fecha y Hora'] <= ahora]
+    df_comuna_historico = df_comuna_completo[df_comuna_completo['Fecha y Hora'] <= ahora]
+
     st.subheader(f"Analisis Historico Regional: {region_elegida}")
     fig_reg_hist = px.line(df_region_historico, x='Fecha y Hora', y=df_region_historico.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Comuna'})
     fig_reg_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
@@ -213,7 +212,6 @@ with tab1:
     
     st.divider()
     
-    # Exportación (Auditoría)
     st.subheader("Generacion de Reportes de Cumplimiento")
     st.write("Descarga informes gerenciales auditables.")
 
