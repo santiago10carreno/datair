@@ -14,17 +14,13 @@ import concurrent.futures
 # ==========================================
 st.set_page_config(page_title="Datair | Inteligencia Ambiental", layout="wide", initial_sidebar_state="expanded")
 
+# AQUI ESTÁ LA CORRECCIÓN: Se eliminó el bloqueo de tamaño del sidebar
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        
-        section[data-testid="stSidebar"] {
-            width: 260px !important;
-            min-width: 260px !important;
-        }
         
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
