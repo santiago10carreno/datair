@@ -20,22 +20,22 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* 1. MAGIA PARA LA BARRA LATERAL: Ocultamos el header pero revivimos el botón */
-        header { visibility: hidden !important; }
-        [data-testid="collapsedControl"] { 
-            visibility: visible !important; 
-            background-color: #1A1C1E !important;
-            border: 1px solid #2D3139 !important;
-            border-radius: 5px !important;
+        /* 1. EL TRUCO DEFINITIVO: Barra superior de cristal (transparente) en lugar de borrada */
+        header[data-testid="stHeader"] {
+            background-color: transparent !important;
         }
         
-        /* 2. Ocultar basura restante */
-        #MainMenu, footer, [data-testid="stToolbar"], .stAppDeployButton {
+        /* 2. Borrado quirúrgico: Solo eliminamos los menús de la derecha y la línea de colores */
+        [data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer {
             display: none !important;
-            visibility: hidden !important;
         }
 
-        /* 3. DISEÑO DE CAJAS DE MÉTRICAS */
+        /* 3. Asegurar que el botón de la flecha siga en su lugar y sea clickeable */
+        [data-testid="collapsedControl"] {
+            z-index: 999999 !important;
+        }
+
+        /* 4. DISEÑO DE CAJAS DE MÉTRICAS */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -49,7 +49,7 @@ st.markdown("""
             width: 100% !important;
         }
         
-        /* 4. FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
+        /* 5. FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
