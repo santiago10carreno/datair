@@ -257,28 +257,13 @@ promedio_nacional = df_mapa["Concentracion"].mean() if not df_mapa.empty else 0
 estaciones_criticas = len(df_mapa[df_mapa["Estado"].isin(["Alerta", "Preemergencia", "Emergencia"])]) if not df_mapa.empty else 0
 
 if estaciones_criticas > (len(df_mapa) * 0.3): estado_pais = "Emergencia Nacional"
-elif estaciones_criticas > 0: estado_pais = "Zonas en Alerta"
+elif estaciones_criticas > 0: estado_pais = "Zonas en Riesgo Activo"
 else: estado_pais = "Condiciones Optimas"
 
 col1, col2, col3 = st.columns(3)
 with col1: st.metric(label="Promedio Pais Actual", value=f"{promedio_nacional:.1f} µg/m³")
 with col2: st.metric(label="Estado General", value=estado_pais)
-with col3: st.metric(label="Sectores en Riesgo (ICAP)", value=f"{estaciones_criticas} de {total_hardware_valido}")
-
-# --- NUEVO: DRILL-DOWN DE SECTORES EN RIESGO ---
-if estaciones_criticas > 0:
-    with st.expander("🚨 Ver detalle de los Sectores en Riesgo actuales"):
-        # Filtramos solo las estaciones en peligro
-        df_riesgo = df_mapa[df_mapa["Estado"].isin(["Alerta", "Preemergencia", "Emergencia"])].copy()
-        # Ordenamos de la más contaminada a la menos contaminada
-        df_riesgo = df_riesgo.sort_values(by="Concentracion", ascending=False).reset_index(drop=True)
-        
-        # Mostramos la tabla limpia sin coordenadas
-        st.dataframe(
-            df_riesgo[["Region", "Comuna", "Estacion", "Concentracion", "Estado"]],
-            use_container_width=True,
-            hide_index=True
-        )
+with col3: st.metric(label="Sectores en Riesgo (ICAP)", value=f"{estaciones_criticas} de {total_hardware_valido}", help="Ve a la pestaña 'Centro de Alertas' para ver el detalle gráfico de las zonas en riesgo.")
 
 st.divider()
 
@@ -667,7 +652,7 @@ with tab5:
         st.plotly_chart(fig_viento, use_container_width=True)
 
 # ------------------------------------------
-# TAB 6: CENTRO DE ALERTAS Y SAT
+# TAB 6: CENTRO DE ALERTAS Y SAT (ACTUALIZADO CON GRÁFICOS)
 # ------------------------------------------
 with tab6:
     st.subheader("Sala de Control Central")
@@ -737,5 +722,35 @@ with tab6:
         df_futuro = pd.DataFrame(alertas_futuras).sort_values("Inicio Proyectado").reset_index(drop=True)
         st.warning(f"¡ATENCIÓN! Se proyectan superaciones a la norma en **{len(alertas_futuras)}** estaciones para los próximos días.")
         st.dataframe(df_futuro, use_container_width=True, hide_index=True)
+        
+        # --- NUEVO: GRÁFICOS AUTOMÁTICOS PARA ZONAS EN RIESGO ---
+        st.markdown("#### 📈 Evidencia Gráfica de Zonas en Riesgo")
+        
+        for alerta in alertas_futuras:
+            reg_graf = alerta["Región"]
+            com_graf = alerta["Comuna"]
+            est_graf = alerta["Estación"]
+            
+            # Recuperamos la serie de datos completa de esa estación
+            serie_grafico = datos_totales[reg_graf][com_graf][est_graf]
+            df_g = serie_grafico.reset_index()
+            df_g.columns = ['Fecha y Hora', 'Concentración']
+            
+            # Dibujamos el gráfico
+            fig_sat = px.line(
+                df_g, x='Fecha y Hora', y='Concentración', 
+                title=f"Proyección Crítica: {est_graf} ({com_graf})",
+                color_discrete_sequence=["#FF4B4B"]
+            )
+            fig_sat.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Límite Legal")
+            fig_sat.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
+            
+            # Acotamos el eje X para que solo muestre desde ayer hasta el final de la predicción
+            rango_inicio = ahora - pd.Timedelta(hours=24)
+            rango_fin = ahora + pd.Timedelta(hours=72)
+            fig_sat.update_xaxes(range=[rango_inicio, rango_fin])
+            
+            st.plotly_chart(fig_sat, use_container_width=True)
+
     else:
-        st.info("El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
+        st.info(" El modelo predictivo indica que no habrá superaciones normativas en los próximos 3 días.")
