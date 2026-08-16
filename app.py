@@ -21,11 +21,6 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         
-        section[data-testid="stSidebar"] {
-            width: 260px !important;
-            min-width: 260px !important;
-        }
-        
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -70,12 +65,9 @@ configuracion = {
 }
 
 # ==========================================
-# 2. BARRA LATERAL (PORTAL DE CLIENTE)
+# 2. BARRA LATERAL 
 # ==========================================
-st.sidebar.title("Portal de Empresa")
-cliente_activo = st.sidebar.selectbox("Sesion iniciada como:", ["Demo Publica", "Agroindustria Valle Central", "Minera Los Andes", "Constructora Metropolitana"])
-st.sidebar.divider()
-st.sidebar.title("Configuracion Global")
+st.sidebar.title("⚙️ Configuracion Global")
 contaminante_elegido = st.sidebar.selectbox("Selecciona el Contaminante", list(configuracion.keys()))
 
 var_api = configuracion[contaminante_elegido]["api"]
@@ -142,11 +134,7 @@ df_mapa = pd.DataFrame(datos_mapa)
 # ==========================================
 # 5. UI PRINCIPAL Y KPIS
 # ==========================================
-if cliente_activo == "Demo Publica":
-    st.title("Datair | Inteligencia Ambiental")
-else:
-    st.title(f"Datair | Portal Corporativo: {cliente_activo}")
-
+st.title("Datair | Inteligencia Ambiental")
 st.markdown(f"**Monitoreo Nacional de {contaminante_elegido}** | Limite Normativo: `{limite_actual} µg/m³`")
 
 promedio_nacional = df_mapa["Concentracion"].mean() if not df_mapa.empty else 0
@@ -227,16 +215,16 @@ with tab1:
     
     # Exportación (Auditoría)
     st.subheader("Generacion de Reportes de Cumplimiento")
-    st.write(f"Descarga informes gerenciales auditables para **{cliente_activo}**.")
+    st.write("Descarga informes gerenciales auditables.")
 
-    def generar_excel_universal(df_datos, contaminante, limite, nombre_zona, tipo_zona, cliente):
+    def generar_excel_universal(df_datos, contaminante, limite, nombre_zona, tipo_zona):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_datos.to_excel(writer, sheet_name='Base_Datos', index=False, startrow=3)
             ws_resumen = writer.book.create_sheet('Dashboard_Ejecutivo', 0)
             ws_datos = writer.sheets['Base_Datos']
             
-            ws_datos['A1'] = f"REGISTRO CONTINUO - {contaminante} ({nombre_zona}) - {cliente}"
+            ws_datos['A1'] = f"REGISTRO CONTINUO - {contaminante} ({nombre_zona})"
             ws_datos['A1'].font = Font(size=12, bold=True)
             ws_datos['A2'] = f"Limite Normativo: {limite} µg/m³"
             ws_datos['A2'].font = Font(italic=True, color="595959")
@@ -273,8 +261,8 @@ with tab1:
             ws_resumen.merge_cells('B2:H3')
             ws_resumen['B2'].alignment = Alignment(horizontal="center", vertical="center")
             
-            ws_resumen['B4'] = f"Cliente:"
-            ws_resumen['C4'] = cliente
+            ws_resumen['B4'] = "Tipo de Informe:"
+            ws_resumen['C4'] = "Auditoria Oficial"
             ws_resumen['B5'], ws_resumen['C5'] = f"{tipo_zona} Evaluada:", nombre_zona
             ws_resumen['B6'], ws_resumen['C6'] = "Parametro Evaluado:", contaminante
             ws_resumen['B7'], ws_resumen['C7'] = "Limite Legal:", f"{limite} µg/m³"
@@ -316,7 +304,7 @@ with tab1:
 
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        excel_region = generar_excel_universal(df_region_historico, contaminante_elegido, limite_actual, region_elegida, "Region", cliente_activo)
+        excel_region = generar_excel_universal(df_region_historico, contaminante_elegido, limite_actual, region_elegida, "Region")
         st.download_button(
             label=f"Descargar Auditoria Regional ({region_elegida})",
             data=excel_region,
@@ -324,7 +312,7 @@ with tab1:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     with col_btn2:
-        excel_comuna = generar_excel_universal(df_comuna_historico, contaminante_elegido, limite_actual, comuna_elegida, "Comuna", cliente_activo)
+        excel_comuna = generar_excel_universal(df_comuna_historico, contaminante_elegido, limite_actual, comuna_elegida, "Comuna")
         st.download_button(
             label=f"Descargar Auditoria Comunal ({comuna_elegida})",
             data=excel_comuna,
