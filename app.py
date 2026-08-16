@@ -20,24 +20,12 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* ---------------------------------------------------
-           HACK DE MARCA BLANCA "NIVEL DIOS" (Fuerza Bruta)
-           --------------------------------------------------- */
         #MainMenu {display: none !important; visibility: hidden !important;} 
         footer {display: none !important; visibility: hidden !important;} 
         header {display: none !important; visibility: hidden !important;} 
         
-        /* Matar clases de visores y barras flotantes de versiones recientes */
-        [data-testid="stDecoration"] {display: none !important;}
-        [data-testid="stToolbar"] {display: none !important;}
-        [data-testid="stStatusWidget"] {display: none !important;}
-        [data-testid="manage-app-button"] {display: none !important;}
-        .viewerBadge_container {display: none !important;}
-        .viewerBadge_link {display: none !important;}
-        
-        /* RASTREAR Y DESTRUIR: Oculta CUALQUIER elemento en toda la página que tenga un link a Streamlit */
+        [data-testid="stDecoration"], [data-testid="stToolbar"], [data-testid="stStatusWidget"], [data-testid="manage-app-button"], .viewerBadge_container, .viewerBadge_link {display: none !important;}
         a[href^="https://streamlit.io"] {display: none !important;}
-        /* --------------------------------------------------- */
 
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
@@ -99,7 +87,45 @@ configuracion = {
 }
 
 # ==========================================
-# 2. BARRA LATERAL 
+# 2. MOTOR ICAP CHILE (NUEVO)
+# ==========================================
+def evaluar_icap(valor, contaminante):
+    """Evalúa la concentración según el Índice de Calidad del Aire (ICAP) de Chile."""
+    if contaminante == "MP2.5":
+        if valor <= 50: return "Bueno", "#00E400", 8
+        elif valor <= 79: return "Regular", "#FFFF00", 10
+        elif valor <= 109: return "Alerta", "#FF7E00", 13
+        elif valor <= 169: return "Preemergencia", "#FF0000", 16
+        else: return "Emergencia", "#8F3F97", 22
+        
+    elif contaminante == "MP10":
+        if valor <= 150: return "Bueno", "#00E400", 8
+        elif valor <= 194: return "Regular", "#FFFF00", 10
+        elif valor <= 239: return "Alerta", "#FF7E00", 13
+        elif valor <= 329: return "Preemergencia", "#FF0000", 16
+        else: return "Emergencia", "#8F3F97", 22
+        
+    else:
+        # Para gases, calculamos el porcentaje de peligro equivalente al ICAP
+        limite = configuracion[contaminante]["limite"]
+        pct = valor / limite
+        if pct <= 0.6: return "Bueno", "#00E400", 8
+        elif pct <= 0.9: return "Regular", "#FFFF00", 10
+        elif pct <= 1.2: return "Alerta", "#FF7E00", 13
+        elif pct <= 1.5: return "Preemergencia", "#FF0000", 16
+        else: return "Emergencia", "#8F3F97", 22
+
+# Paleta oficial para forzar colores en Plotly
+PALETA_ICAP = {
+    "Bueno": "#00E400", 
+    "Regular": "#FFFF00", 
+    "Alerta": "#FF7E00", 
+    "Preemergencia": "#FF0000", 
+    "Emergencia": "#8F3F97"
+}
+
+# ==========================================
+# 3. BARRA LATERAL 
 # ==========================================
 st.sidebar.title("Configuracion Global")
 contaminante_elegido = st.sidebar.selectbox("Selecciona el Contaminante Principal", list(configuracion.keys()))
@@ -108,7 +134,7 @@ var_api = configuracion[contaminante_elegido]["api"]
 limite_actual = configuracion[contaminante_elegido]["limite"]
 
 # ==========================================
-# 3. EXTRACCIÓN ASÍNCRONA
+# 4. EXTRACCIÓN ASÍNCRONA
 # ==========================================
 def obtener_datos_estacion_individual(args):
     lat, lon, variable, region, comuna, sector = args
@@ -204,7 +230,7 @@ datos_totales, total_hardware_valido = descargar_todos_los_datos(contaminante_el
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 
 # ==========================================
-# 4. PREPARACIÓN DE DATOS BASE
+# 5. PREPARACIÓN DE DATOS CON LÓGICA ICAP
 # ==========================================
 datos_mapa = []
 for region, comunas in datos_totales.items():
@@ -217,32 +243,49 @@ for region, comunas in datos_totales.items():
                 except:
                     valor_actual = serie.iloc[-1]
                 
-                estado = "Critico" if valor_actual > limite_actual else "Normal"
-                color = "red" if valor_actual > limite_actual else "green"
-                tamanio = 15 if valor_actual > limite_actual else 8
+                estado_icap, color_icap, tamanio_icap = evaluar_icap(valor_actual, contaminante_elegido)
+                
                 datos_mapa.append({
                     "Region": region, "Comuna": comuna, "Estacion": sector,
                     "Latitud": DICCIONARIO_ZONAS[region][comuna][sector][0], "Longitud": DICCIONARIO_ZONAS[region][comuna][sector][1],
-                    "Concentracion": round(valor_actual, 1), "Estado": estado, "Color": color, "Tamaño": tamanio
+                    "Concentracion": round(valor_actual, 1), 
+                    "Estado": estado_icap, 
+                    "Color": color_icap, 
+                    "Tamaño": tamanio_icap
                 })
 df_mapa = pd.DataFrame(datos_mapa)
 
 # ==========================================
-# 5. UI PRINCIPAL Y KPIS
+# 6. UI PRINCIPAL Y KPIS
 # ==========================================
 st.title("Datair | Inteligencia Ambiental")
-st.markdown(f"**Monitoreo Nacional de {contaminante_elegido}** | Limite Normativo: `{limite_actual} µg/m³`")
+st.markdown(f"**Monitoreo Nacional de {contaminante_elegido}** | Limite Normativo 24h: `{limite_actual} µg/m³`")
 
 promedio_nacional = df_mapa["Concentracion"].mean() if not df_mapa.empty else 0
-estaciones_criticas = len(df_mapa[df_mapa["Estado"] == "Critico"]) if not df_mapa.empty else 0
-estado_pais = "Alerta Nacional" if estaciones_criticas > (len(df_mapa) * 0.2) else "Estable"
+# Contamos estaciones que superan la categoría "Bueno" y "Regular" (es decir, Alerta, Preemergencia o Emergencia)
+estaciones_criticas = len(df_mapa[df_mapa["Estado"].isin(["Alerta", "Preemergencia", "Emergencia"])]) if not df_mapa.empty else 0
+
+if estaciones_criticas > (len(df_mapa) * 0.3): estado_pais = "Emergencia Nacional"
+elif estaciones_criticas > 0: estado_pais = "Zonas en Alerta"
+else: estado_pais = "Condiciones Optimas"
 
 col1, col2, col3 = st.columns(3)
 with col1: st.metric(label="Promedio Pais Actual", value=f"{promedio_nacional:.1f} µg/m³")
 with col2: st.metric(label="Estado General", value=estado_pais)
-with col3: st.metric(label=f"Red de Sensores ({contaminante_elegido})", value=f"{len(df_mapa)} / {total_hardware_valido} activos")
+with col3: st.metric(label="Sectores en Riesgo (ICAP)", value=f"{estaciones_criticas} de {total_hardware_valido}")
 
 st.divider()
+
+# Leyenda visual ICAP
+st.markdown("""
+<div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; font-size: 0.9rem;">
+    <div><span style="color:#00E400;">🟢</span> Bueno</div>
+    <div><span style="color:#FFFF00;">🟡</span> Regular</div>
+    <div><span style="color:#FF7E00;">🟠</span> Alerta</div>
+    <div><span style="color:#FF0000;">🔴</span> Preemergencia</div>
+    <div><span style="color:#8F3F97;">🟣</span> Emergencia</div>
+</div>
+""", unsafe_allow_html=True)
 
 # ==========================================
 # SISTEMA DE PESTAÑAS (TABS)
@@ -255,13 +298,15 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # TAB 1: MONITOREO Y DISPERSIÓN
 # ------------------------------------------
 with tab1:
-    st.subheader("Red de Monitoreo (Estaciones Fisicas)")
+    st.subheader("Red de Monitoreo (Semáforo ICAP)")
     if not df_mapa.empty:
+        # Aplicamos la paleta de colores oficial al mapa
         fig_mapa = px.scatter_mapbox(
             df_mapa, lat="Latitud", lon="Longitud", hover_name="Estacion", 
             hover_data={"Latitud": False, "Longitud": False, "Region": True, "Comuna": True, "Concentracion": True, "Estado": True, "Tamaño": False, "Color": False},
-            color="Estado", color_discrete_map={"Critico": "red", "Normal": "green"},
-            size="Tamaño", zoom=4, center={"lat": -35.0, "lon": -71.0}, height=500
+            color="Estado", color_discrete_map=PALETA_ICAP,
+            size="Tamaño", zoom=4, center={"lat": -35.0, "lon": -71.0}, height=500,
+            category_orders={"Estado": ["Bueno", "Regular", "Alerta", "Preemergencia", "Emergencia"]}
         )
         fig_mapa.update_layout(mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0})
         st.plotly_chart(fig_mapa, use_container_width=True)
