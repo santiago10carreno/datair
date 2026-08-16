@@ -20,33 +20,44 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* 1. BORRADO QUIRÚRGICO: Adiós menú, botón Deploy, raya de colores y pie de página */
+        /* =======================================================
+           LA SOLUCIÓN DEFINITIVA PARA LA BARRA LATERAL
+           Congelamos el header y anulamos el JavaScript interno
+        ======================================================== */
+        
+        /* 1. Forzar al Header y a TODOS sus contenedores hijos a quedarse quietos y visibles SIEMPRE */
+        header[data-testid="stHeader"], 
+        header[data-testid="stHeader"] > div,
+        [data-testid="collapsedControl"] {
+            opacity: 1 !important;
+            visibility: visible !important;
+            transform: none !important;
+            transition: none !important;
+            pointer-events: auto !important;
+            z-index: 999999 !important;
+        }
+
+        /* 2. Volver el fondo del header de cristal para que no tape tu app */
+        header[data-testid="stHeader"] {
+            background-color: transparent !important;
+        }
+
+        /* 3. Eliminar la línea roja/colores superior */
+        header[data-testid="stHeader"]::before {
+            display: none !important;
+        }
+
+        /* 4. Borrar con francotirador los botones basura (Deploy, Menú, etc.) */
         [data-testid="stToolbar"], 
-        [data-testid="stDecoration"], 
-        .stAppDeployButton, 
+        .stAppDeployButton,
+        #MainMenu,
         footer {
             display: none !important;
         }
 
-        /* 2. REPARACIÓN DEL BOTÓN (ANTI AUTO-HIDE) */
-        /* Hacemos la barra superior transparente y dejamos que los clics pasen a través de ella... */
-        header[data-testid="stHeader"] {
-            background-color: transparent !important;
-            opacity: 1 !important; 
-            pointer-events: none !important; 
-        }
-
-        /* ... pero le devolvemos el poder de clic y visibilidad permanente SOLO al botón de la flecha */
-        [data-testid="collapsedControl"] {
-            pointer-events: auto !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            background-color: #1A1C1E !important;
-            border: 1px solid #2D3139 !important;
-            border-radius: 5px !important;
-        }
-
-        /* 3. DISEÑO DE CAJAS DE MÉTRICAS */
+        /* =======================================================
+           DISEÑO DE LAS MÉTRICAS (ESTO YA FUNCIONA PERFECTO)
+        ======================================================== */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -60,11 +71,11 @@ st.markdown("""
             width: 100% !important;
         }
         
-        /* 4. FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
         }
+        
         [data-testid="stMetricValue"] > div {
             white-space: normal !important;
             word-wrap: break-word !important;
