@@ -260,7 +260,7 @@ def consultar_clima_coordenada(lat, lon):
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 
 # ==========================================
-# 3. MENÚ DE NAVEGACIÓN PRINCIPAL (PESTAÑAS LATERALES)
+# 3. MENÚ DE NAVEGACIÓN PRINCIPAL (BARRA LATERAL)
 # ==========================================
 # Inicializamos la variable de sesión si no existe
 if "modulo_activo" not in st.session_state:
@@ -271,20 +271,22 @@ def cambiar_modulo(nuevo_modulo):
     st.session_state.modulo_activo = nuevo_modulo
 
 st.sidebar.title("Datair OS")
-st.sidebar.markdown("**Navegación:**")
+st.sidebar.markdown("**Módulos:**")
 
-# CAMBIO: Usamos botones dispuestos horizontalmente (Segmented Control)
-col_nav1, col_nav2 = st.sidebar.columns(2)
-with col_nav1:
-    st.button("🌍 Dashboard", 
-              type="primary" if st.session_state.modulo_activo == "Dashboard" else "secondary", 
-              use_container_width=True, 
-              on_click=cambiar_modulo, args=("Dashboard",))
-with col_nav2:
-    st.button("🤖 Simulador", 
-              type="primary" if st.session_state.modulo_activo == "Simulador" else "secondary", 
-              use_container_width=True, 
-              on_click=cambiar_modulo, args=("Simulador",))
+# CAMBIO: Botones apilados verticalmente (uno debajo del otro)
+st.sidebar.button(
+    "🌍 Dashboard Nacional", 
+    type="primary" if st.session_state.modulo_activo == "Dashboard" else "secondary", 
+    use_container_width=True, 
+    on_click=cambiar_modulo, args=("Dashboard",)
+)
+
+st.sidebar.button(
+    "🤖 Simulador AI", 
+    type="primary" if st.session_state.modulo_activo == "Simulador" else "secondary", 
+    use_container_width=True, 
+    on_click=cambiar_modulo, args=("Simulador",)
+)
 
 st.sidebar.divider()
 
