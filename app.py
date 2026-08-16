@@ -8,7 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.chart import LineChart, Reference
 import concurrent.futures
-
+#lacabra
 # ==========================================
 # CONFIGURACIÓN Y ESTILOS CORPORATIVOS
 # ==========================================
