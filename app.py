@@ -185,13 +185,11 @@ with tab1:
     
     st.divider()
     
-    # Filtros locales movidos exactamente debajo del mapa
-    st.subheader("Filtros de Analisis Local")
+    st.subheader("Filtros de Analisis Local Historico")
     col_filtro1, col_filtro2 = st.columns(2)
-    with col_filtro1: region_elegida = st.selectbox("Selecciona la Region", list(DICCIONARIO_ZONAS.keys()), index=3)
-    with col_filtro2: comuna_elegida = st.selectbox("Selecciona la Comuna", list(DICCIONARIO_ZONAS[region_elegida].keys()))
+    with col_filtro1: region_elegida = st.selectbox("Selecciona la Region", list(DICCIONARIO_ZONAS.keys()), index=3, key="reg_hist")
+    with col_filtro2: comuna_elegida = st.selectbox("Selecciona la Comuna", list(DICCIONARIO_ZONAS[region_elegida].keys()), key="com_hist")
 
-    # Procesamiento de datos de la zona elegida (Sirve para Tab 1 y Tab 2)
     datos_sectores_comuna = {}
     lista_promedios_comunas = {}
 
@@ -211,7 +209,6 @@ with tab1:
     df_region_historico = df_region_completo[df_region_completo['Fecha y Hora'] <= ahora]
     df_comuna_historico = df_comuna_completo[df_comuna_completo['Fecha y Hora'] <= ahora]
 
-    # Graficos locales
     st.subheader(f"Analisis Historico Regional: {region_elegida}")
     fig_reg_hist = px.line(df_region_historico, x='Fecha y Hora', y=df_region_historico.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Comuna'})
     fig_reg_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
@@ -224,7 +221,6 @@ with tab1:
     
     st.divider()
     
-    # Exportacion
     st.subheader("Generacion de Reportes de Cumplimiento")
     st.write("Descarga informes gerenciales auditables.")
 
@@ -335,18 +331,40 @@ with tab1:
 # TAB 2: PROYECCIÓN (FUTURO)
 # ------------------------------------------
 with tab2:
-    st.subheader(f"Modelo Predictivo Regional: {region_elegida}")
-    fig_region_pred = px.line(df_region_completo, x='Fecha y Hora', y=df_region_completo.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Comuna'})
+    st.subheader("Filtros de Proyeccion Predictiva")
+    col_proy1, col_proy2 = st.columns(2)
+    with col_proy1: reg_proy = st.selectbox("Selecciona la Region", list(DICCIONARIO_ZONAS.keys()), index=3, key="reg_proy")
+    with col_proy2: com_proy = st.selectbox("Selecciona la Comuna", list(DICCIONARIO_ZONAS[reg_proy].keys()), key="com_proy")
+
+    # Procesamos de nuevo solo para esta pestaña, permitiendo filtros independientes
+    datos_sectores_proy = {}
+    lista_promedios_proy = {}
+
+    if reg_proy in datos_totales:
+        for comuna, sectores in datos_totales[reg_proy].items():
+            series_comuna = []
+            for sector, serie in sectores.items():
+                series_comuna.append(serie)
+                if comuna == com_proy:
+                    datos_sectores_proy[sector] = serie
+            if series_comuna:
+                lista_promedios_proy[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
+
+    df_region_proy = pd.DataFrame(lista_promedios_proy).reset_index().rename(columns={'index': 'Fecha y Hora'})
+    df_comuna_proy = pd.DataFrame(datos_sectores_proy).reset_index().rename(columns={'index': 'Fecha y Hora'})
+
+    st.subheader(f"Modelo Predictivo Regional: {reg_proy}")
+    fig_region_pred = px.line(df_region_proy, x='Fecha y Hora', y=df_region_proy.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Comuna'})
     fig_region_pred.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
     fig_region_pred.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-    fig_region_pred.add_vrect(x0=ahora, x1=df_region_completo['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
+    fig_region_pred.add_vrect(x0=ahora, x1=df_region_proy['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
     st.plotly_chart(fig_region_pred, use_container_width=True)
 
-    st.subheader(f"Modelo Predictivo Comunal: {comuna_elegida}")
-    fig_comuna_pred = px.line(df_comuna_completo, x='Fecha y Hora', y=df_comuna_completo.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Estacion'})
+    st.subheader(f"Modelo Predictivo Comunal: {com_proy}")
+    fig_comuna_pred = px.line(df_comuna_proy, x='Fecha y Hora', y=df_comuna_proy.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Estacion'})
     fig_comuna_pred.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
     fig_comuna_pred.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-    fig_comuna_pred.add_vrect(x0=ahora, x1=df_comuna_completo['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
+    fig_comuna_pred.add_vrect(x0=ahora, x1=df_comuna_proy['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
     st.plotly_chart(fig_comuna_pred, use_container_width=True)
 
 # ------------------------------------------
