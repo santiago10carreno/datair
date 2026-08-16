@@ -23,10 +23,10 @@ st.markdown("""
         
         /* CÓDIGO CSS LIMPIO: La flecha de la barra lateral funcionará de manera 100% natural */
         
-        /* ANCHO DE LA BARRA LATERAL (Más espacio y elegancia) */
+        /* ANCHO DE LA BARRA LATERAL (Más angosta y elegante) */
         [data-testid="stSidebar"] {
-            min-width: 380px !important;
-            max-width: 450px !important;
+            min-width: 280px !important;
+            max-width: 330px !important;
         }
 
         /* DISEÑO DE LAS MÉTRICAS */
@@ -266,16 +266,48 @@ def consultar_clima_coordenada(lat, lon):
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 
 # ==========================================
-# 3. MENÚ DE NAVEGACIÓN PRINCIPAL (BARRA LATERAL)
+# 3. BARRA LATERAL: CONFIGURACIÓN GLOBAL PERMANENTE
 # ==========================================
+st.sidebar.title("Datair OS")
+
+# Gestión de Estado para la fuente de datos
+if "fuente_datos" not in st.session_state:
+    st.session_state.fuente_datos = "Open-Meteo (Modelo Global)"
+
+fuente_actual = st.session_state.fuente_datos
+
+if fuente_actual == "SINCA (Oficial - Piloto)":
+    contaminantes_disponibles = ["MP10", "MP2.5", "SO2"]
+    diccionario_activo = DICCIONARIO_SINCA_PILOTO
+else:
+    contaminantes_disponibles = list(configuracion.keys())
+    diccionario_activo = DICCIONARIO_ZONAS
+
+st.sidebar.subheader("Parámetros Principales")
+
+# ORDEN SOLICITADO: 1. Contaminante, 2. Fuente, 3. Módulos
+contaminante_elegido = st.sidebar.selectbox("Contaminante a Analizar", contaminantes_disponibles)
+
+fuente_datos = st.sidebar.selectbox(
+    "Fuente de Datos",
+    ["Open-Meteo (Modelo Global)", "SINCA (Oficial - Piloto)"],
+    key="fuente_datos"
+)
+
+if fuente_datos == "SINCA (Oficial - Piloto)":
+    st.sidebar.success("Conexión Oficial Activa")
+
+var_api = configuracion[contaminante_elegido]["api"]
+limite_actual = configuracion[contaminante_elegido]["limite"]
+
+st.sidebar.divider()
+st.sidebar.markdown("**Navegación de Módulos:**")
+
 if "modulo_activo" not in st.session_state:
     st.session_state.modulo_activo = "Dashboard"
 
 def cambiar_modulo(nuevo_modulo):
     st.session_state.modulo_activo = nuevo_modulo
-
-st.sidebar.title("Datair OS")
-st.sidebar.markdown("**Módulos:**")
 
 st.sidebar.button(
     "Dashboard Nacional", 
@@ -285,7 +317,7 @@ st.sidebar.button(
 )
 
 st.sidebar.button(
-    "Simulador AI", 
+    "Simulador B2B (AI)", 
     type="primary" if st.session_state.modulo_activo == "Simulador" else "secondary", 
     use_container_width=True, 
     on_click=cambiar_modulo, args=("Simulador",)
@@ -300,26 +332,6 @@ modulo_activo = st.session_state.modulo_activo
 # ==========================================
 if modulo_activo == "Dashboard":
     
-    st.sidebar.subheader("Configuración de Red")
-    
-    fuente_datos = st.sidebar.selectbox(
-        "Fuente de Extracción:",
-        ["Open-Meteo (Modelo Global)", "SINCA (Oficial - Piloto)"]
-    )
-
-    if fuente_datos == "SINCA (Oficial - Piloto)":
-        diccionario_activo = DICCIONARIO_SINCA_PILOTO
-        st.sidebar.success("Conexión Oficial Activa")
-        contaminantes_disponibles = ["MP10", "MP2.5", "SO2"]
-    else:
-        diccionario_activo = DICCIONARIO_ZONAS
-        contaminantes_disponibles = list(configuracion.keys())
-
-    st.sidebar.divider()
-    contaminante_elegido = st.sidebar.selectbox("Filtro de Contaminante", contaminantes_disponibles)
-    var_api = configuracion[contaminante_elegido]["api"]
-    limite_actual = configuracion[contaminante_elegido]["limite"]
-
     # Procesamiento de Datos del Dashboard
     datos_totales, total_hardware_valido = descargar_todos_los_datos(contaminante_elegido, var_api, fuente_datos)
     
@@ -630,12 +642,10 @@ if modulo_activo == "Dashboard":
 # ==========================================
 elif modulo_activo == "Simulador":
     
-    st.sidebar.info("**Modo B2B Activo**\n\nTodas las configuraciones operativas han sido movidas a su panel central de trabajo.")
-    
     st.title("Datair AI | Simulador de Emisiones e Impacto")
     st.write("Ingrese las coordenadas y la tasa de emisión de su planta a continuación. Nuestro motor cruzará su operación con el clima en tiempo real para generar un **Informe Consultivo Automático**.")
     
-    st.markdown("### Parámetros de Operación de la Planta")
+    st.markdown(f"### Parámetros de Operación de la Planta ({contaminante_elegido})")
     
     with st.container():
         col_param1, col_param2, col_param3 = st.columns(3)
@@ -643,11 +653,10 @@ elif modulo_activo == "Simulador":
             lat_em = st.number_input("Latitud de Descarga", value=-34.1708, format="%.4f")
             lon_em = st.number_input("Longitud de Descarga", value=-70.7441, format="%.4f")
         with col_param2:
-            contam_em = st.selectbox("Contaminante", ["MP10", "MP2.5", "SO2"])
             tasa_em = st.number_input("Emisión (kg/h)", min_value=0.1, value=50.0, step=1.0)
-        with col_param3:
             altura_em = st.number_input("Altura Chimenea (m)", min_value=1.0, value=30.0, step=1.0)
-            st.markdown("<br>", unsafe_allow_html=True)
+        with col_param3:
+            st.markdown("<br><br>", unsafe_allow_html=True)
             btn_simular = st.button("Ejecutar Simulación AI", type="primary", use_container_width=True)
 
     st.divider()
@@ -675,8 +684,7 @@ elif modulo_activo == "Simulador":
                 puntos_pluma.append({"Latitud": lat_em + d_lat, "Longitud": lon_em + d_lon, "Concentracion": c_fantasma})
 
             df_pluma_ai = pd.DataFrame(puntos_pluma)
-            limite_legal = configuracion[contam_em]["limite"]
-            supera_norma = concentracion_max > limite_legal
+            supera_norma = concentracion_max > limite_actual
             
             col_mapa, col_reporte = st.columns([1.3, 1])
             
@@ -695,15 +703,15 @@ elif modulo_activo == "Simulador":
                 st.markdown("### Reporte de Datair AI")
                 
                 if supera_norma:
-                    st.error(f"**RIESGO CRÍTICO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, superando el límite legal de {limite_legal} µg/m³ para {contam_em}.")
+                    st.error(f"**RIESGO CRÍTICO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, superando el límite legal de {limite_actual} µg/m³ para {contaminante_elegido}.")
                 else:
-                    st.success(f"**RIESGO BAJO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, manteniéndose bajo el límite legal de {limite_legal} µg/m³ para {contam_em}.")
+                    st.success(f"**RIESGO BAJO.** La concentración a nivel de suelo es de **{concentracion_max:.1f} µg/m³**, manteniéndose bajo el límite legal de {limite_actual} µg/m³ para {contaminante_elegido}.")
 
                 st.markdown("#### Impacto Comunitario")
                 st.write(f"Con {temp_actual} °C y vientos de {vel_viento} km/h, la pluma se desplazará hacia el **{int(angulo_viaje)}°**. Ecosistemas en un radio de **{int(distancia_impacto)} m** en esta dirección recibirán el mayor impacto.")
 
                 st.markdown("#### Plan de Mitigación Propuesto")
-                if contam_em in ["MP10", "MP2.5"]:
+                if contaminante_elegido in ["MP10", "MP2.5"]:
                     st.markdown("""
                     1. **Ingeniería:** Activar supresión de polvo y revisar filtros de mangas.
                     2. **Operacional:** Reducir molienda en un 30% temporalmente.
