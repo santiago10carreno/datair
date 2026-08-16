@@ -19,9 +19,20 @@ st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
         
+        /* ---------------------------------------------------
+           HACK DE MARCA BLANCA: Ocultar branding de Streamlit
+           --------------------------------------------------- */
+        #MainMenu {visibility: hidden;} /* Oculta el menú de los tres puntos */
+        footer {visibility: hidden;} /* Oculta el pie de página */
+        header {visibility: hidden;} /* Oculta la franja superior de Streamlit */
+        
+        /* Oculta la marca de agua flotante en celulares ("Hosted with Streamlit") */
+        .viewerBadge_container { display: none !important; }
+        .viewerBadge_link { display: none !important; }
+        [data-testid="stDecoration"] { display: none !important; }
+        /* --------------------------------------------------- */
+
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -228,7 +239,7 @@ with col3: st.metric(label=f"Red de Sensores ({contaminante_elegido})", value=f"
 st.divider()
 
 # ==========================================
-# SISTEMA DE PESTAÑAS (TABS) REESTRUCTURADO
+# SISTEMA DE PESTAÑAS (TABS)
 # ==========================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Monitoreo y Analisis", "Proyeccion a 72 Hrs", "Comparador Cruzado", "Perfil de Estacion", "Contexto Meteorologico"
@@ -253,10 +264,9 @@ with tab1:
     
     st.divider()
     
-    # --- MODELO DE DISPERSIÓN TRASLADADO AQUÍ ---
     st.subheader("Modelo de Dispersion Espacial Organico")
     st.write("Visualizacion termica de la pluma de contaminacion en base al vector de viento actual.")
-    st.caption("ℹ️ *Nota:* Este mapa utiliza tecnología de difuminado visual de pantalla. Funciona mejor al mantener una vista regional completa para ver la mezcla de estaciones.")
+    st.caption("ℹ️ *Nota:* Este mapa utiliza tecnología de difuminado visual de pantalla. Funciona mejor al mantener una vista regional completa.")
     
     if not df_mapa.empty:
         df_vectores = obtener_viento_batch(df_mapa.copy())
