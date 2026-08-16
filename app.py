@@ -8,6 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.chart import LineChart, Reference
 import concurrent.futures
+import math
 
 # ==========================================
 # CONFIGURACIÓN Y ESTILOS CORPORATIVOS
@@ -90,7 +91,7 @@ var_api = configuracion[contaminante_elegido]["api"]
 limite_actual = configuracion[contaminante_elegido]["limite"]
 
 # ==========================================
-# 3. EXTRACCIÓN ASÍNCRONA ESTRICTA
+# 3. EXTRACCIÓN ASÍNCRONA Y VECTORES DE VIENTO
 # ==========================================
 def obtener_datos_estacion_individual(args):
     lat, lon, variable, region, comuna, sector = args
@@ -138,7 +139,6 @@ def obtener_datos_multivariable(lat, lon, variables_api_lista):
     except:
         return pd.DataFrame()
 
-# Módulo de Extracción Meteorológica (Agregada Direccion del Viento)
 @st.cache_data(ttl=3600)
 def obtener_meteorologia(lat, lon):
     try:
@@ -155,6 +155,30 @@ def obtener_meteorologia(lat, lon):
     except:
         return pd.DataFrame()
 
+def obtener_viento_batch(df):
+    if df.empty: return df
+    lats = ",".join(df['Latitud'].astype(str))
+    lons = ",".join(df['Longitud'].astype(str))
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&current=wind_speed_10m,wind_direction_10m&timezone=America%2FSantiago"
+    
+    try:
+        res = requests.get(url, timeout=5)
+        data = res.json()
+        vels, dirs = [], []
+        if isinstance(data, list):
+            for d in data:
+                vels.append(d.get('current', {}).get('wind_speed_10m', 0))
+                dirs.append(d.get('current', {}).get('wind_direction_10m', 0))
+        else:
+            vels.append(data.get('current', {}).get('wind_speed_10m', 0))
+            dirs.append(data.get('current', {}).get('wind_direction_10m', 0))
+        df['WindSpd'] = vels
+        df['WindDir'] = dirs
+    except:
+        df['WindSpd'] = 0
+        df['WindDir'] = 0
+    return df
+
 def grados_a_cardinal(d):
     dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
     ix = int((d + 11.25)/22.5)
@@ -164,7 +188,7 @@ datos_totales, total_hardware_valido = descargar_todos_los_datos(contaminante_el
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 
 # ==========================================
-# 4. PREPARACIÓN DE DATOS PARA EL MAPA
+# 4. PREPARACIÓN DE DATOS BASE
 # ==========================================
 datos_mapa = []
 for region, comunas in datos_totales.items():
@@ -205,14 +229,14 @@ with col3: st.metric(label=f"Red de Sensores ({contaminante_elegido})", value=f"
 st.divider()
 
 # ==========================================
-# SISTEMA DE PESTAÑAS (TABS) ACTUALIZADO
+# SISTEMA DE PESTAÑAS (TABS)
 # ==========================================
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Monitoreo", "Proyeccion", "Benchmarking", "Multivariable", "Meteorologia", "Dispersion Espacial"
 ])
 
 # ------------------------------------------
-# TAB 1: MONITOREO NORMAL Y EXPORTACIÓN
+# TAB 1 A 5 MANTENIDOS INTACTOS
 # ------------------------------------------
 with tab1:
     st.subheader("Mapa Geografico en Tiempo Real")
@@ -227,12 +251,10 @@ with tab1:
         st.plotly_chart(fig_mapa, use_container_width=True)
     else:
         st.warning(f"No hay estaciones certificadas con sensores de {contaminante_elegido} respondiendo actualmente.")
-    
     st.divider()
     
     st.subheader("Filtros de Analisis Local Historico")
     regiones_disponibles = list(datos_totales.keys())
-    
     if regiones_disponibles:
         col_filtro1, col_filtro2 = st.columns(2)
         with col_filtro1: region_elegida = st.selectbox("Selecciona la Region", regiones_disponibles, key="reg_hist")
@@ -266,9 +288,6 @@ with tab1:
         fig_com_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
         st.plotly_chart(fig_com_hist, use_container_width=True)
 
-# ------------------------------------------
-# TAB 2: PROYECCIÓN (FUTURO)
-# ------------------------------------------
 with tab2:
     st.subheader("Filtros de Proyeccion Predictiva")
     if datos_totales:
@@ -278,15 +297,12 @@ with tab2:
 
         datos_sectores_proy = {}
         lista_promedios_proy = {}
-
         for comuna, sectores in datos_totales[reg_proy].items():
             series_comuna = []
             for sector, serie in sectores.items():
                 series_comuna.append(serie)
-                if comuna == com_proy:
-                    datos_sectores_proy[sector] = serie
-            if series_comuna:
-                lista_promedios_proy[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
+                if comuna == com_proy: datos_sectores_proy[sector] = serie
+            if series_comuna: lista_promedios_proy[comuna] = pd.concat(series_comuna, axis=1).mean(axis=1)
 
         df_region_proy = pd.DataFrame(lista_promedios_proy).reset_index().rename(columns={'index': 'Fecha y Hora'})
         df_comuna_proy = pd.DataFrame(datos_sectores_proy).reset_index().rename(columns={'index': 'Fecha y Hora'})
@@ -305,9 +321,6 @@ with tab2:
         fig_comuna_pred.add_vrect(x0=ahora, x1=df_comuna_proy['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
         st.plotly_chart(fig_comuna_pred, use_container_width=True)
 
-# ------------------------------------------
-# TAB 3: BENCHMARKING
-# ------------------------------------------
 with tab3:
     st.subheader("Benchmarking Corporativo (Comparador Cruzado)")
     if len(datos_totales) > 0:
@@ -315,7 +328,6 @@ with tab3:
         with col_vs1:
             reg_a = st.selectbox("Region A", list(datos_totales.keys()), key="reg_a")
             com_a = st.selectbox("Comuna A", list(datos_totales[reg_a].keys()), key="com_a")
-
         with col_vs2:
             reg_b = st.selectbox("Region B", list(datos_totales.keys()), index=min(1, len(datos_totales)-1), key="reg_b")
             com_b = st.selectbox("Comuna B", list(datos_totales[reg_b].keys()), key="com_b")
@@ -338,9 +350,6 @@ with tab3:
             fig_vs.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
             st.plotly_chart(fig_vs, use_container_width=True)
 
-# ------------------------------------------
-# TAB 4: PERFIL DE ESTACIÓN (MULTIVARIABLE)
-# ------------------------------------------
 with tab4:
     st.subheader("Perfil de Estacion (Analisis Multivariable)")
     col_p1, col_p2, col_p3 = st.columns(3)
@@ -363,7 +372,6 @@ with tab4:
         
         if not df_multi.empty:
             df_multi = df_multi.rename(columns={configuracion[c]["api"]: c for c in contaminantes_seleccionados}).reset_index().rename(columns={'index': 'Fecha y Hora'})
-            
             if "Separados" in modo_vista:
                 df_melt = df_multi.melt(id_vars=['Fecha y Hora'], value_vars=contaminantes_seleccionados, var_name='Contaminante', value_name='Concentracion')
                 fig_multi = px.line(df_melt, x='Fecha y Hora', y='Concentracion', facet_row='Contaminante', height=250 * len(contaminantes_seleccionados))
@@ -379,13 +387,8 @@ with tab4:
                 fig_norm.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
                 st.plotly_chart(fig_norm, use_container_width=True)
 
-# ------------------------------------------
-# TAB 5: CONTEXTO METEOROLÓGICO Y VIENTO
-# ------------------------------------------
 with tab5:
     st.subheader("Contexto Meteorologico y Direccion del Viento")
-    st.write("Cruce de datos climaticos que afectan la dispersion de la contaminacion.")
-
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: reg_m = st.selectbox("Region", list(DICCIONARIO_ZONAS.keys()), index=3, key="reg_m")
     with col_m2: com_m = st.selectbox("Comuna", list(DICCIONARIO_ZONAS[reg_m].keys()), key="com_m")
@@ -422,7 +425,6 @@ with tab5:
             st.metric(f"☁️ {contaminante_elegido}", val_c_str)
 
         st.divider()
-
         st.markdown("**Evolucion de la Temperatura (Riesgo de Inversion Termica)**")
         fig_temp = px.line(df_met, x='Fecha y Hora', y='Temperatura (°C)')
         fig_temp.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
@@ -436,41 +438,77 @@ with tab5:
         st.plotly_chart(fig_viento, use_container_width=True)
 
 # ------------------------------------------
-# TAB 6: MAPA DE DISPERSIÓN (GRADIENTE TÉRMICO)
+# TAB 6: MAPA DE DISPERSIÓN CON ADVECCIÓN
 # ------------------------------------------
 with tab6:
-    st.subheader("Mapa de Dispersion (Modelamiento por Densidad Espacial)")
-    st.write("Estima las concentraciones en las zonas intermedias (donde no hay hardware) interpolando los datos de las estaciones cercanas activas. Las areas brillantes indican alta acumulacion de gases.")
+    st.subheader("Modelamiento de Dispersion de Contaminantes")
+    st.write("Aproximacion numerica que simula la adveccion de los gases calculando el impacto en los alrededores segun el vector de viento actual.")
     
     if not df_mapa.empty:
-        # Selector para enfocar la cámara del mapa
-        regiones_disp = list(df_mapa['Region'].unique())
+        df_vectores = obtener_viento_batch(df_mapa.copy())
+        
+        puntos_pluma = []
+        for _, row in df_vectores.iterrows():
+            lat = row['Latitud']
+            lon = row['Longitud']
+            c = row['Concentracion']
+            spd = row.get('WindSpd', 0)
+            dir_viento = row.get('WindDir', 0)
+            
+            puntos_pluma.append(row.to_dict())
+            
+            if spd > 1:
+                # El gas viaja en direccion opuesta a donde viene el viento
+                angulo_viaje = (dir_viento + 180) % 360
+                angulo_rad = math.radians(90 - angulo_viaje)
+                
+                pasos = 6
+                longitud_pluma = spd * 0.0015 # Factor de expansion 
+                
+                for i in range(1, pasos + 1):
+                    frac = i / pasos
+                    dist = longitud_pluma * frac
+                    
+                    d_lat = dist * math.sin(angulo_rad)
+                    d_lon = dist * math.cos(angulo_rad) / math.cos(math.radians(lat))
+                    
+                    # Decaimiento exponencial desde la fuente
+                    c_fantasma = c * math.exp(-3 * frac) 
+                    
+                    if c_fantasma > (limite_actual * 0.05):
+                        nuevo_punto = row.to_dict()
+                        nuevo_punto['Latitud'] = lat + d_lat
+                        nuevo_punto['Longitud'] = lon + d_lon
+                        nuevo_punto['Concentracion'] = c_fantasma
+                        nuevo_punto['Estacion'] = row['Estacion'] + " (Pluma)"
+                        puntos_pluma.append(nuevo_punto)
+        
+        df_pluma = pd.DataFrame(puntos_pluma)
+
+        regiones_disp = list(df_vectores['Region'].unique())
         reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, index=0 if "Región Metropolitana" not in regiones_disp else regiones_disp.index("Región Metropolitana"))
         
-        # Obtenemos el centro de la región seleccionada para hacer zoom
-        df_region_mapa = df_mapa[df_mapa['Region'] == reg_mapa]
+        df_region_mapa = df_vectores[df_vectores['Region'] == reg_mapa]
         if not df_region_mapa.empty:
             lat_centro = df_region_mapa['Latitud'].mean()
             lon_centro = df_region_mapa['Longitud'].mean()
         else:
             lat_centro, lon_centro = -35.0, -71.0
 
-        # Creación del Heatmap de Plotly
         fig_heat = px.density_mapbox(
-            df_mapa, 
+            df_pluma, 
             lat="Latitud", 
             lon="Longitud", 
-            z="Concentracion", # La variable que define el "calor" o color
-            radius=45,         # Radio de difuminación hacia los alrededores
+            z="Concentracion",
+            radius=45,         
             center={"lat": lat_centro, "lon": lon_centro}, 
             zoom=8,
             mapbox_style="carto-darkmatter", 
-            color_continuous_scale="Inferno", # Paleta de colores ardiente
+            color_continuous_scale="Inferno", 
             opacity=0.7, 
-            hover_name="Estacion",
-            title=f"Gradiente Termico de {contaminante_elegido} a Nivel Nacional"
+            hover_name="Estacion"
         )
         fig_heat.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
         st.plotly_chart(fig_heat, use_container_width=True)
     else:
-        st.warning(f"No hay suficientes datos de hardware para modelar el gradiente de {contaminante_elegido}.")
+        st.warning(f"No hay suficientes datos de hardware para modelar la dispersion de {contaminante_elegido}.")
