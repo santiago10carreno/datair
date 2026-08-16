@@ -21,15 +21,9 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* 
-           ========================================================
-           HEMOS BORRADO TODA LA MAGIA QUE OCULTABA LA BARRA SUPERIOR.
-           Streamlit volverá a su estado 100% natural de fábrica.
-           La flecha funcionará perfectamente para que puedas testear.
-           ======================================================== 
-        */
+        /* CÓDIGO CSS LIMPIO: La flecha de la barra lateral funcionará de manera 100% natural */
 
-        /* DISEÑO CORPORATIVO (Métricas y Textos) */
+        /* DISEÑO DE LAS MÉTRICAS */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -44,6 +38,7 @@ st.markdown("""
             border-left: 4px solid #4A90E2; 
         }
         
+        /* FIX PARA TEXTOS CORTADOS */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
@@ -62,6 +57,7 @@ st.markdown("""
             font-size: 1.05rem; font-weight: 600;
         }
         
+        /* Estilo para el reporte de IA */
         .ai-report-box {
             background-color: #141618;
             border: 1px solid #3A3F47;
@@ -264,25 +260,43 @@ def consultar_clima_coordenada(lat, lon):
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 
 # ==========================================
-# 3. MENÚ DE NAVEGACIÓN PRINCIPAL (BARRA LATERAL)
+# 3. MENÚ DE NAVEGACIÓN PRINCIPAL (PESTAÑAS LATERALES)
 # ==========================================
-st.sidebar.title("Datair OS")
+# Inicializamos la variable de sesión si no existe
+if "modulo_activo" not in st.session_state:
+    st.session_state.modulo_activo = "Dashboard"
 
-# CAMBIO: Usamos un selectbox (desplegable) en lugar de radio buttons (círculos)
-modulo_activo = st.sidebar.selectbox(
-    "Navegación de Módulos:",
-    ["🌍 Dashboard de Monitoreo", "🤖 Simulador Consultivo (AI)"]
-)
+# Función que cambia el módulo al hacer clic
+def cambiar_modulo(nuevo_modulo):
+    st.session_state.modulo_activo = nuevo_modulo
+
+st.sidebar.title("Datair OS")
+st.sidebar.markdown("**Navegación:**")
+
+# CAMBIO: Usamos botones dispuestos horizontalmente (Segmented Control)
+col_nav1, col_nav2 = st.sidebar.columns(2)
+with col_nav1:
+    st.button("🌍 Dashboard", 
+              type="primary" if st.session_state.modulo_activo == "Dashboard" else "secondary", 
+              use_container_width=True, 
+              on_click=cambiar_modulo, args=("Dashboard",))
+with col_nav2:
+    st.button("🤖 Simulador", 
+              type="primary" if st.session_state.modulo_activo == "Simulador" else "secondary", 
+              use_container_width=True, 
+              on_click=cambiar_modulo, args=("Simulador",))
+
 st.sidebar.divider()
+
+modulo_activo = st.session_state.modulo_activo
 
 # ==========================================
 # MÓDULO 1: DASHBOARD DE MONITOREO
 # ==========================================
-if modulo_activo == "🌍 Dashboard de Monitoreo":
+if modulo_activo == "Dashboard":
     
     st.sidebar.subheader("Configuración de Red")
     
-    # CAMBIO: Usamos selectbox también aquí para eliminar círculos
     fuente_datos = st.sidebar.selectbox(
         "Fuente de Extracción:",
         ["Open-Meteo (Modelo Global)", "SINCA (Oficial - Piloto)"]
@@ -599,7 +613,7 @@ if modulo_activo == "🌍 Dashboard de Monitoreo":
 # ==========================================
 # MÓDULO 2: SIMULADOR CONSULTIVO AI (B2B)
 # ==========================================
-elif modulo_activo == "🤖 Simulador Consultivo (AI)":
+elif modulo_activo == "Simulador":
     
     st.sidebar.info("💡 **Modo B2B Activo**\n\nTodas las configuraciones operativas han sido movidas a su panel central de trabajo.")
     
@@ -608,7 +622,6 @@ elif modulo_activo == "🤖 Simulador Consultivo (AI)":
     
     st.markdown("### ⚙️ Parámetros de Operación de la Planta")
     
-    # CAMBIO: Panel de configuración en el centro dividido en 3 columnas perfectas
     with st.container():
         col_param1, col_param2, col_param3 = st.columns(3)
         with col_param1:
@@ -627,7 +640,6 @@ elif modulo_activo == "🤖 Simulador Consultivo (AI)":
     if btn_simular:
         with st.spinner("Conectando con satélites meteorológicos y redactando informe..."):
             
-            # Motor Matemático y Meteorología
             vel_viento, dir_viento, temp_actual = consultar_clima_coordenada(lat_em, lon_em)
             angulo_viaje = (dir_viento + 180) % 360
             angulo_rad = math.radians(90 - angulo_viaje)
@@ -651,7 +663,6 @@ elif modulo_activo == "🤖 Simulador Consultivo (AI)":
             limite_legal = configuracion[contam_em]["limite"]
             supera_norma = concentracion_max > limite_legal
             
-            # CAMBIO: Mostramos los resultados en columnas grandes, a la izquierda el mapa, a la derecha el informe
             col_mapa, col_reporte = st.columns([1.3, 1])
             
             with col_mapa:
