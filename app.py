@@ -69,7 +69,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. BASE DE DATOS GEOGRÁFICA Y HARDWARE
+# 1. BASE DE DATOS GEOGRÁFICA Y HARDWARE (NACIONAL)
 # ==========================================
 DICCIONARIO_ZONAS = {
     "Región Metropolitana": {"Santiago Centro": {"Parque O'Higgins": (-33.4641, -70.6607)}, "Independencia": {"Independencia": (-33.4150, -70.6528)}, "Pudahuel": {"Pudahuel": (-33.4326, -70.7818)}, "Quilicura": {"Quilicura": (-33.3663, -70.7351)}, "Las Condes": {"Las Condes": (-33.3769, -70.5239)}, "Cerrillos": {"Cerrillos": (-33.4939, -70.7161)}, "El Bosque": {"El Bosque": (-33.5350, -70.6766)}, "Cerro Navia": {"Cerro Navia": (-33.4334, -70.7348)}, "Puente Alto": {"Puente Alto": (-33.6163, -70.5831)}, "Talagante": {"Talagante": (-33.6669, -70.9275)}},
@@ -83,14 +83,6 @@ DICCIONARIO_ZONAS = {
     "Región de Los Lagos": {"Osorno": {"Osorno": (-40.5700, -73.1300)}, "Puerto Montt": {"Puerto Montt": (-41.4700, -72.9300)}},
     "Región de Aysén": {"Coyhaique": {"Coyhaique 1": (-45.5700, -72.0700), "Coyhaique 2": (-45.5800, -72.0600)}},
     "Región de Magallanes": {"Punta Arenas": {"Punta Arenas": (-53.1500, -70.9000)}}
-}
-
-DICCIONARIO_SINCA_PILOTO = {
-    "Región de O'Higgins": {
-        "Rancagua": {"Rancagua (Centro)": (-34.1708, -70.7441)}, 
-        "Rengo": {"Rengo (Centro)": (-34.4091, -70.8591)}, 
-        "San Fernando": {"San Fernando": (-34.5847, -70.9880)}
-    }
 }
 
 MAPA_SENSORES = {
@@ -176,7 +168,8 @@ def obtener_datos_sinca_simulados(args):
 def descargar_todos_los_datos(contaminante_nombre, variable_api, fuente):
     lista_tareas = []
     estaciones_con_hardware = 0
-    dicc_usar = DICCIONARIO_SINCA_PILOTO if fuente == "SINCA (Oficial - Piloto)" else DICCIONARIO_ZONAS
+    # AHORA AMBOS MODELOS USAN LA BASE DE DATOS NACIONAL
+    dicc_usar = DICCIONARIO_ZONAS 
     for region, comunas in dicc_usar.items():
         for comuna, sectores in comunas.items():
             for sector, coords in sectores.items():
@@ -185,7 +178,7 @@ def descargar_todos_los_datos(contaminante_nombre, variable_api, fuente):
                     lista_tareas.append((coords[0], coords[1], variable_api, region, comuna, sector))
     
     resultados_completos = {}
-    funcion_extraccion = obtener_datos_sinca_simulados if fuente == "SINCA (Oficial - Piloto)" else obtener_datos_estacion_individual
+    funcion_extraccion = obtener_datos_sinca_simulados if fuente == "SINCA (Oficial - Nacional)" else obtener_datos_estacion_individual
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         for region, comuna, sector, serie in executor.map(funcion_extraccion, lista_tareas):
             if not serie.empty:
@@ -258,7 +251,6 @@ def consultar_clima_coordenada(lat, lon):
 
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
 
-# Función Helper para anclar la Región Metropolitana por defecto
 def obtener_indice_rm(opciones_lista):
     lista = list(opciones_lista)
     if "Región Metropolitana" in lista:
@@ -273,27 +265,22 @@ st.sidebar.title("Datair OS")
 if "fuente_datos" not in st.session_state:
     st.session_state.fuente_datos = "Open-Meteo (Modelo Global)"
 
-fuente_actual = st.session_state.fuente_datos
-
-if fuente_actual == "SINCA (Oficial - Piloto)":
-    contaminantes_disponibles = ["MP10", "MP2.5", "SO2"]
-    diccionario_activo = DICCIONARIO_SINCA_PILOTO
-else:
-    contaminantes_disponibles = list(configuracion.keys())
-    diccionario_activo = DICCIONARIO_ZONAS
+contaminantes_disponibles = list(configuracion.keys())
+diccionario_activo = DICCIONARIO_ZONAS
 
 st.sidebar.subheader("Parámetros Principales")
 
 contaminante_elegido = st.sidebar.selectbox("Contaminante a Analizar", contaminantes_disponibles)
 
+# CAMBIO DE NOMBRE: Ahora es Piloto Nacional Oficial
 fuente_datos = st.sidebar.selectbox(
     "Fuente de Datos",
-    ["Open-Meteo (Modelo Global)", "SINCA (Oficial - Piloto)"],
+    ["Open-Meteo (Modelo Global)", "SINCA (Oficial - Nacional)"],
     key="fuente_datos"
 )
 
-if fuente_datos == "SINCA (Oficial - Piloto)":
-    st.sidebar.success("Conexión Oficial Activa")
+if fuente_datos == "SINCA (Oficial - Nacional)":
+    st.sidebar.success("Conexión Oficial Activa (Nacional)")
 
 var_api = configuracion[contaminante_elegido]["api"]
 limite_actual = configuracion[contaminante_elegido]["limite"]
@@ -330,7 +317,6 @@ modulo_activo = st.session_state.modulo_activo
 # ==========================================
 if modulo_activo == "Dashboard":
     
-    # Procesamiento de Datos del Dashboard
     datos_totales, total_hardware_valido = descargar_todos_los_datos(contaminante_elegido, var_api, fuente_datos)
     
     datos_mapa = []
@@ -354,9 +340,8 @@ if modulo_activo == "Dashboard":
                     })
     df_mapa = pd.DataFrame(datos_mapa)
 
-    # UI del Dashboard
     st.title("Plataforma de Inteligencia Ambiental")
-    titulo_fuente = "Modelo Predictivo Global" if fuente_datos == "Open-Meteo (Modelo Global)" else "Red de Monitoreo SINCA (Piloto)"
+    titulo_fuente = "Modelo Predictivo Global" if fuente_datos == "Open-Meteo (Modelo Global)" else "Red de Monitoreo SINCA (Nacional)"
     st.markdown(f"**{titulo_fuente} - {contaminante_elegido}** | Limite Normativo 24h: `{limite_actual} µg/m³`")
 
     promedio_nacional = df_mapa["Concentracion"].mean() if not df_mapa.empty else 0
@@ -400,8 +385,7 @@ if modulo_activo == "Dashboard":
                 df_mapa, lat="Latitud", lon="Longitud", hover_name="Estacion", 
                 hover_data={"Latitud": False, "Longitud": False, "Region": True, "Comuna": True, "Concentracion": True, "Estado": True, "Tamaño": False, "Color": False},
                 color="Estado", color_discrete_map=PALETA_ICAP,
-                size="Tamaño", zoom=7 if fuente_datos == "SINCA (Oficial - Piloto)" else 8, 
-                center={"lat": -34.3, "lon": -70.8} if fuente_datos == "SINCA (Oficial - Piloto)" else {"lat": -33.45, "lon": -70.65}, 
+                size="Tamaño", zoom=5, center={"lat": -33.45, "lon": -70.65}, 
                 height=500, category_orders={"Estado": ["Bueno", "Regular", "Alerta", "Preemergencia", "Emergencia"]}
             )
             fig_mapa.update_layout(mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0})
@@ -663,7 +647,6 @@ if modulo_activo == "Dashboard":
             df_alertas_pasadas = pd.DataFrame(alertas_pasadas).sort_values("Último Peak", ascending=False).reset_index(drop=True)
             st.dataframe(df_alertas_pasadas, use_container_width=True, hide_index=True)
             
-            # Restauración de Gráficos de Infracciones Pasadas
             for alerta in alertas_pasadas:
                 reg_graf, com_graf, est_graf = alerta["Región"], alerta["Comuna"], alerta["Estación"]
                 serie_grafico = datos_totales[reg_graf][com_graf][est_graf]
@@ -698,7 +681,6 @@ if modulo_activo == "Dashboard":
             df_alertas_futuras = pd.DataFrame(alertas_futuras).sort_values("Inicio Proyectado").reset_index(drop=True)
             st.dataframe(df_alertas_futuras, use_container_width=True, hide_index=True)
             
-            # Restauración de Gráficos de Proyección Futura
             for alerta in alertas_futuras:
                 reg_graf, com_graf, est_graf = alerta["Región"], alerta["Comuna"], alerta["Estación"]
                 serie_grafico = datos_totales[reg_graf][com_graf][est_graf]
@@ -766,7 +748,6 @@ elif modulo_activo == "Simulador":
             df_pluma_ai = pd.DataFrame(puntos_pluma)
             supera_norma = concentracion_max > limite_actual
             
-            # Renderizado del mapa a ancho completo
             st.markdown(f"**Mapa de Impacto Proyectado (Viento actual: {vel_viento} km/h hacia el {int(angulo_viaje)}º)**")
             fig_ai = px.density_mapbox(
                 df_pluma_ai, lat="Latitud", lon="Longitud", z="Concentracion",
@@ -776,7 +757,6 @@ elif modulo_activo == "Simulador":
             fig_ai.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
             st.plotly_chart(fig_ai, use_container_width=True)
 
-            # Renderizado del reporte justo debajo del mapa
             st.markdown("<div class='ai-report-box'>", unsafe_allow_html=True)
             st.markdown("### Reporte de Datair AI")
             
