@@ -20,44 +20,41 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* =======================================================
-           LA SOLUCIÓN DEFINITIVA PARA LA BARRA LATERAL
-           Congelamos el header y anulamos el JavaScript interno
-        ======================================================== */
-        
-        /* 1. Forzar al Header y a TODOS sus contenedores hijos a quedarse quietos y visibles SIEMPRE */
-        header[data-testid="stHeader"], 
-        header[data-testid="stHeader"] > div,
-        [data-testid="collapsedControl"] {
+        /* 1. CONGELAR LA BARRA SUPERIOR (Transparente y sin auto-ocultamiento) */
+        header, [data-testid="stHeader"], .stAppHeader {
+            background-color: transparent !important;
             opacity: 1 !important;
             visibility: visible !important;
             transform: none !important;
             transition: none !important;
-            pointer-events: auto !important;
+            pointer-events: none !important; /* Deja pasar los clics a la app */
+        }
+
+        /* 2. EL BOTÓN CORRECTO: Usamos el nombre nuevo de Streamlit (stSidebarCollapsedControl) */
+        [data-testid="collapsedControl"], 
+        [data-testid="stSidebarCollapsedControl"] {
+            display: flex !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            pointer-events: auto !important; /* Le devolvemos el poder de hacer clic */
+            background-color: #1A1C1E !important;
+            border: 1px solid #2D3139 !important;
+            border-radius: 5px !important;
+            color: #E2E8F0 !important;
             z-index: 999999 !important;
         }
 
-        /* 2. Volver el fondo del header de cristal para que no tape tu app */
-        header[data-testid="stHeader"] {
-            background-color: transparent !important;
-        }
-
-        /* 3. Eliminar la línea roja/colores superior */
-        header[data-testid="stHeader"]::before {
-            display: none !important;
-        }
-
-        /* 4. Borrar con francotirador los botones basura (Deploy, Menú, etc.) */
+        /* 3. BORRADO QUIRÚRGICO DE LA BASURA */
         [data-testid="stToolbar"], 
-        .stAppDeployButton,
-        #MainMenu,
+        [data-testid="stDecoration"], 
+        .stAppDeployButton, 
+        #MainMenu, 
         footer {
             display: none !important;
+            visibility: hidden !important;
         }
 
-        /* =======================================================
-           DISEÑO DE LAS MÉTRICAS (ESTO YA FUNCIONA PERFECTO)
-        ======================================================== */
+        /* 4. DISEÑO DE CAJAS DE MÉTRICAS */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -71,11 +68,11 @@ st.markdown("""
             width: 100% !important;
         }
         
+        /* 5. FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
         }
-        
         [data-testid="stMetricValue"] > div {
             white-space: normal !important;
             word-wrap: break-word !important;
