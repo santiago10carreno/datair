@@ -20,31 +20,33 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         
-        /* 1. EL ANTI-FANTASMA: Bloquear el JS de Streamlit que desvanece el header */
-        header[data-testid="stHeader"] {
-            background-color: transparent !important;
-            opacity: 1 !important; /* 🛑 FUERZA LA VISIBILIDAD, BLOQUEA EL OPACITY: 0 */
-            transform: translateY(0px) !important; /* 🛑 EVITA QUE SE DESLICE HACIA ARRIBA */
-        }
-        
-        /* 2. Borrado quirúrgico: Adiós línea de colores y botones de la derecha */
-        [data-testid="stDecoration"], [data-testid="stToolbar"], #MainMenu, footer, .stAppDeployButton {
+        /* 1. BORRADO QUIRÚRGICO: Adiós menú, botón Deploy, raya de colores y pie de página */
+        [data-testid="stToolbar"], 
+        [data-testid="stDecoration"], 
+        .stAppDeployButton, 
+        footer {
             display: none !important;
         }
 
-        /* 3. Darle cuerpo y color al botón de la flecha para que no se pierda */
-        [data-testid="collapsedControl"] {
-            display: flex !important;
-            visibility: visible !important;
-            background-color: rgba(26, 28, 30, 0.9) !important;
-            border: 1px solid #2D3139 !important;
-            border-radius: 6px !important;
-            margin-top: 10px !important;
-            margin-left: 10px !important;
-            z-index: 999999 !important;
+        /* 2. REPARACIÓN DEL BOTÓN (ANTI AUTO-HIDE) */
+        /* Hacemos la barra superior transparente y dejamos que los clics pasen a través de ella... */
+        header[data-testid="stHeader"] {
+            background-color: transparent !important;
+            opacity: 1 !important; 
+            pointer-events: none !important; 
         }
 
-        /* 4. DISEÑO DE CAJAS DE MÉTRICAS */
+        /* ... pero le devolvemos el poder de clic y visibilidad permanente SOLO al botón de la flecha */
+        [data-testid="collapsedControl"] {
+            pointer-events: auto !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            background-color: #1A1C1E !important;
+            border: 1px solid #2D3139 !important;
+            border-radius: 5px !important;
+        }
+
+        /* 3. DISEÑO DE CAJAS DE MÉTRICAS */
         div[data-testid="metric-container"] {
             background-color: #1A1C1E;
             border: 1px solid #2D3139;
@@ -58,7 +60,7 @@ st.markdown("""
             width: 100% !important;
         }
         
-        /* 5. FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
+        /* 4. FIX PARA TEXTOS CORTADOS Y ALINEACIÓN PERFECTA */
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
             text-align: left !important;
             width: 100% !important;
