@@ -138,21 +138,27 @@ def obtener_datos_multivariable(lat, lon, variables_api_lista):
     except:
         return pd.DataFrame()
 
-# NUEVO: Módulo de Extracción Meteorológica (Segunda API)
+# Módulo de Extracción Meteorológica (Agregada Direccion del Viento)
 @st.cache_data(ttl=3600)
 def obtener_meteorologia(lat, lon):
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,wind_speed_10m&timezone=America%2FSantiago&past_days=7&forecast_days=3"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m&timezone=America%2FSantiago&past_days=7&forecast_days=3"
         res = requests.get(url, timeout=5)
         datos = res.json()
         fechas = pd.to_datetime(datos['hourly']['time']).tz_localize(None)
         df_met = pd.DataFrame({
             'Temperatura (°C)': datos['hourly']['temperature_2m'],
-            'Velocidad Viento (km/h)': datos['hourly']['wind_speed_10m']
+            'Velocidad Viento (km/h)': datos['hourly']['wind_speed_10m'],
+            'Direccion Viento (°)': datos['hourly']['wind_direction_10m']
         }, index=fechas)
         return df_met.reset_index().rename(columns={'index': 'Fecha y Hora'})
     except:
         return pd.DataFrame()
+
+def grados_a_cardinal(d):
+    dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    ix = int((d + 11.25)/22.5)
+    return dirs[ix % 16]
 
 datos_totales, total_hardware_valido = descargar_todos_los_datos(contaminante_elegido, var_api)
 ahora = pd.Timestamp.now(tz='America/Santiago').tz_localize(None)
@@ -199,9 +205,11 @@ with col3: st.metric(label=f"Red de Sensores ({contaminante_elegido})", value=f"
 st.divider()
 
 # ==========================================
-# SISTEMA DE PESTAÑAS (TABS)
+# SISTEMA DE PESTAÑAS (TABS) ACTUALIZADO
 # ==========================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Monitoreo y Analisis", "Proyeccion a 72 Hrs", "Comparador Cruzado", "Perfil de Estacion", "Contexto Meteorologico"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "Monitoreo", "Proyeccion", "Benchmarking", "Multivariable", "Meteorologia", "Dispersion Espacial"
+])
 
 # ------------------------------------------
 # TAB 1: MONITOREO NORMAL Y EXPORTACIÓN
@@ -257,114 +265,6 @@ with tab1:
         fig_com_hist = px.line(df_comuna_historico, x='Fecha y Hora', y=df_comuna_historico.columns[1:], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Estacion'})
         fig_com_hist.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
         st.plotly_chart(fig_com_hist, use_container_width=True)
-        
-        st.divider()
-        
-        st.subheader("Generacion de Reportes de Cumplimiento")
-        st.write("Descarga informes gerenciales auditables.")
-
-        def generar_excel_universal(df_datos, contaminante, limite, nombre_zona, tipo_zona):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_datos.to_excel(writer, sheet_name='Base_Datos', index=False, startrow=3)
-                ws_resumen = writer.book.create_sheet('Dashboard_Ejecutivo', 0)
-                ws_datos = writer.sheets['Base_Datos']
-                
-                ws_datos['A1'] = f"REGISTRO CONTINUO - {contaminante} ({nombre_zona})"
-                ws_datos['A1'].font = Font(size=12, bold=True)
-                ws_datos['A2'] = f"Limite Normativo: {limite} µg/m³"
-                ws_datos['A2'].font = Font(italic=True, color="595959")
-                
-                header_fill, header_font = PatternFill(start_color="2F75B5", fill_type="solid"), Font(bold=True, color="FFFFFF")
-                columnas_datos = list(df_datos.columns)[1:] 
-                
-                for col_idx, _ in enumerate(df_datos.columns, start=1):
-                    col_letter = openpyxl.utils.get_column_letter(col_idx)
-                    ws_datos[f'{col_letter}4'].fill = header_fill
-                    ws_datos[f'{col_letter}4'].font = header_font
-                    ws_datos.column_dimensions[col_letter].width = 22
-                    
-                red_fill, red_font = PatternFill(start_color="FFC7CE", fill_type="solid"), Font(color="9C0006", bold=True)
-                green_fill, green_font = PatternFill(start_color="C6EFCE", fill_type="solid"), Font(color="006100")
-                
-                rule_over = CellIsRule(operator='greaterThan', formula=[str(limite)], stopIfTrue=True, fill=red_fill, font=red_font)
-                rule_under = CellIsRule(operator='lessThanOrEqual', formula=[str(limite)], stopIfTrue=True, fill=green_fill, font=green_font)
-                
-                ultima_letra = openpyxl.utils.get_column_letter(len(df_datos.columns))
-                ws_datos.conditional_formatting.add(f'B5:{ultima_letra}{len(df_datos)+4}', rule_over)
-                ws_formatting = ws_datos.conditional_formatting
-                ws_formatting.add(f'B5:{ultima_letra}{len(df_datos)+4}', rule_under)
-                ws_datos.auto_filter.ref = f"A4:{ultima_letra}{len(df_datos)+4}"
-                ws_datos.freeze_panes = 'A5'
-                
-                for row in range(1, 30):
-                    for col in range(1, 15):
-                        ws_resumen.cell(row=row, column=col).fill = PatternFill(start_color="F2F2F2", fill_type="solid")
-                
-                ws_resumen['B2'] = f"REPORTE DE AUDITORIA - {tipo_zona.upper()}"
-                ws_resumen['B2'].font = Font(size=18, bold=True, color="FFFFFF")
-                ws_resumen['B2'].fill = PatternFill(start_color="1F4E78", fill_type="solid")
-                ws_resumen.merge_cells('B2:H3')
-                ws_resumen['B2'].alignment = Alignment(horizontal="center", vertical="center")
-                
-                ws_resumen['B4'] = "Tipo de Informe:"
-                ws_resumen['C4'] = "Auditoria Oficial"
-                ws_resumen['B5'], ws_resumen['C5'] = f"{tipo_zona} Evaluada:", nombre_zona
-                ws_resumen['B6'], ws_resumen['C6'] = "Parametro Evaluado:", contaminante
-                ws_resumen['B7'], ws_resumen['C7'] = "Limite Legal:", f"{limite} µg/m³"
-                ws_resumen['C7'].font = Font(bold=True, color="C00000")
-                
-                kpi_headers = ['Sub-zona', 'Promedio', 'Peak Maximo', 'Horas Infraccion', 'Estado']
-                for i, header in enumerate(kpi_headers, start=2):
-                    cell = ws_resumen.cell(row=10, column=i)
-                    cell.value, cell.font, cell.fill, cell.alignment = header, header_font, header_fill, Alignment(horizontal="center")
-                    ws_resumen.column_dimensions[openpyxl.utils.get_column_letter(i)].width = 20
-                    
-                for idx, subzona in enumerate(columnas_datos):
-                    row = 11 + idx
-                    horas_infraccion = (df_datos[subzona] > limite).sum()
-                    ws_resumen.cell(row=row, column=2).value = subzona
-                    ws_resumen.cell(row=row, column=3).value = round(df_datos[subzona].mean(), 2)
-                    ws_resumen.cell(row=row, column=4).value = round(df_datos[subzona].max(), 2)
-                    ws_resumen.cell(row=row, column=5).value = horas_infraccion
-                    estado_cell = ws_resumen.cell(row=row, column=6)
-                    if horas_infraccion > 0:
-                        estado_cell.value, estado_cell.font, estado_cell.fill = "CRITICO", red_font, red_fill
-                    else:
-                        estado_cell.value, estado_cell.font, estado_cell.fill = "CUMPLE", green_font, green_fill
-                        
-                    for col in range(2, 7):
-                        ws_resumen.cell(row=row, column=col).alignment = Alignment(horizontal="center")
-                        ws_resumen.cell(row=row, column=col).border = Border(left=Side(style='thin', color='A6A6A6'), right=Side(style='thin', color='A6A6A6'), top=Side(style='thin', color='A6A6A6'), bottom=Side(style='thin', color='A6A6A6'))
-                        
-                chart = LineChart()
-                chart.title = f"Monitoreo Continuo - {contaminante}"
-                chart.style, chart.width, chart.height = 13, 25, 13
-                data = Reference(ws_datos, min_col=2, min_row=4, max_col=len(df_datos.columns), max_row=len(df_datos)+4)
-                cats = Reference(ws_datos, min_col=1, min_row=5, max_row=len(df_datos)+4)
-                chart.add_data(data, titles_from_data=True)
-                chart.set_categories(cats)
-                ws_resumen.add_chart(chart, "B16")
-                
-            return output.getvalue()
-
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            excel_region = generar_excel_universal(df_region_historico, contaminante_elegido, limite_actual, region_elegida, "Region")
-            st.download_button(
-                label=f"Descargar Auditoria Regional ({region_elegida})",
-                data=excel_region,
-                file_name=f"Auditoria_{region_elegida}_{contaminante_elegido}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        with col_btn2:
-            excel_comuna = generar_excel_universal(df_comuna_historico, contaminante_elegido, limite_actual, comuna_elegida, "Comuna")
-            st.download_button(
-                label=f"Descargar Auditoria Comunal ({comuna_elegida})",
-                data=excel_comuna,
-                file_name=f"Auditoria_{comuna_elegida}_{contaminante_elegido}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
 
 # ------------------------------------------
 # TAB 2: PROYECCIÓN (FUTURO)
@@ -410,17 +310,13 @@ with tab2:
 # ------------------------------------------
 with tab3:
     st.subheader("Benchmarking Corporativo (Comparador Cruzado)")
-    st.write("Solo muestra zonas que cuentan con sensor fisico para el contaminante global seleccionado.")
-
     if len(datos_totales) > 0:
         col_vs1, col_vs2 = st.columns(2)
         with col_vs1:
-            st.markdown("**Zona de Operacion A**")
             reg_a = st.selectbox("Region A", list(datos_totales.keys()), key="reg_a")
             com_a = st.selectbox("Comuna A", list(datos_totales[reg_a].keys()), key="com_a")
 
         with col_vs2:
-            st.markdown("**Zona de Operacion B**")
             reg_b = st.selectbox("Region B", list(datos_totales.keys()), index=min(1, len(datos_totales)-1), key="reg_b")
             com_b = st.selectbox("Comuna B", list(datos_totales[reg_b].keys()), key="com_b")
 
@@ -428,10 +324,8 @@ with tab3:
             series = []
             if region in datos_totales and comuna in datos_totales[region]:
                 for sector, serie in datos_totales[region][comuna].items():
-                    if not serie.empty:
-                        series.append(serie)
-            if series:
-                return pd.concat(series, axis=1).mean(axis=1)
+                    if not serie.empty: series.append(serie)
+            if series: return pd.concat(series, axis=1).mean(axis=1)
             return pd.Series(dtype=float)
 
         promedio_a = obtener_promedio_comuna(reg_a, com_a)
@@ -439,86 +333,58 @@ with tab3:
 
         if not promedio_a.empty and not promedio_b.empty:
             df_vs = pd.DataFrame({com_a: promedio_a, com_b: promedio_b}).reset_index().rename(columns={'index': 'Fecha y Hora'})
-            
             fig_vs = px.line(df_vs, x='Fecha y Hora', y=[com_a, com_b], labels={'value': 'Concentracion (µg/m³)', 'variable': 'Comuna Analizada'})
             fig_vs.add_hline(y=limite_actual, line_dash="dot", line_color="red", annotation_text="Limite Legal")
             fig_vs.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-            fig_vs.add_vrect(x0=ahora, x1=df_vs['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
             st.plotly_chart(fig_vs, use_container_width=True)
-            
-            try:
-                val_a = df_vs[com_a][df_vs['Fecha y Hora'] <= ahora].iloc[-1]
-                val_b = df_vs[com_b][df_vs['Fecha y Hora'] <= ahora].iloc[-1]
-                diff = val_a - val_b
-                if diff > 0:
-                    st.info(f"Insight Operativo: Actualmente, {com_a} presenta {diff:.1f} µg/m³ MAS de {contaminante_elegido} que {com_b}.")
-                elif diff < 0:
-                    st.info(f"Insight Operativo: Actualmente, {com_a} presenta {abs(diff):.1f} µg/m³ MENOS de {contaminante_elegido} que {com_b}.")
-            except: pass
 
 # ------------------------------------------
 # TAB 4: PERFIL DE ESTACIÓN (MULTIVARIABLE)
 # ------------------------------------------
 with tab4:
     st.subheader("Perfil de Estacion (Analisis Multivariable)")
-    st.write("Filtro Estricto: Solo puedes seleccionar contaminantes que la estacion fisica realmente mide.")
-
     col_p1, col_p2, col_p3 = st.columns(3)
     with col_p1: reg_p = st.selectbox("Region", list(DICCIONARIO_ZONAS.keys()), index=3, key="reg_p_multi")
     with col_p2: com_p = st.selectbox("Comuna", list(DICCIONARIO_ZONAS[reg_p].keys()), key="com_p_multi")
     with col_p3: est_p = st.selectbox("Estacion Especifica", list(DICCIONARIO_ZONAS[reg_p][com_p].keys()), key="est_p_multi")
 
     sensores_certificados = obtener_sensores_certificados(est_p)
-    st.success(f"Sensores de hardware detectados en {est_p}: **{', '.join(sensores_certificados)}**")
-
     contaminantes_seleccionados = st.multiselect(
-        "1. Selecciona los contaminantes a comparar:", 
-        sensores_certificados,  
+        "Selecciona los contaminantes a comparar:", sensores_certificados,  
         default=[s for s in ["MP2.5", "MP10"] if s in sensores_certificados]
     )
 
-    modo_vista = st.radio(
-        "2. Selecciona el Modo de Visualizacion:", 
-        ["Grafico Unificado (Porcentaje del Limite Legal)", "Graficos Separados (Valores Absolutos)"], 
-        horizontal=True
-    )
+    modo_vista = st.radio("Modo de Visualizacion:", ["Grafico Unificado (Porcentaje del Limite)", "Graficos Separados (Absolutos)"], horizontal=True)
 
     if contaminantes_seleccionados:
         lat_p, lon_p = DICCIONARIO_ZONAS[reg_p][com_p][est_p]
         vars_api = [configuracion[c]["api"] for c in contaminantes_seleccionados]
-        
         df_multi = obtener_datos_multivariable(lat_p, lon_p, vars_api)
         
         if not df_multi.empty:
-            diccionario_renombrado = {configuracion[c]["api"]: c for c in contaminantes_seleccionados}
-            df_multi = df_multi.rename(columns=diccionario_renombrado)
-            df_multi = df_multi.reset_index().rename(columns={'index': 'Fecha y Hora'})
+            df_multi = df_multi.rename(columns={configuracion[c]["api"]: c for c in contaminantes_seleccionados}).reset_index().rename(columns={'index': 'Fecha y Hora'})
             
             if "Separados" in modo_vista:
                 df_melt = df_multi.melt(id_vars=['Fecha y Hora'], value_vars=contaminantes_seleccionados, var_name='Contaminante', value_name='Concentracion')
                 fig_multi = px.line(df_melt, x='Fecha y Hora', y='Concentracion', facet_row='Contaminante', height=250 * len(contaminantes_seleccionados))
                 fig_multi.update_yaxes(matches=None)
                 fig_multi.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-                fig_multi.add_vrect(x0=ahora, x1=df_multi['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
                 st.plotly_chart(fig_multi, use_container_width=True)
             else:
                 df_norm = df_multi.copy()
-                for c in contaminantes_seleccionados:
-                    df_norm[c] = (df_norm[c] / configuracion[c]["limite"]) * 100
-                
+                for c in contaminantes_seleccionados: df_norm[c] = (df_norm[c] / configuracion[c]["limite"]) * 100
                 df_melt_norm = df_norm.melt(id_vars=['Fecha y Hora'], value_vars=contaminantes_seleccionados, var_name='Contaminante', value_name='Porcentaje del Limite (%)')
                 fig_norm = px.line(df_melt_norm, x='Fecha y Hora', y='Porcentaje del Limite (%)', color='Contaminante')
                 fig_norm.add_hline(y=100, line_dash="dot", line_color="red", annotation_text="LIMITE LEGAL (100%)")
                 fig_norm.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-                fig_norm.add_vrect(x0=ahora, x1=df_norm['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
                 st.plotly_chart(fig_norm, use_container_width=True)
 
 # ------------------------------------------
-# TAB 5: CONTEXTO METEOROLÓGICO (NUEVO)
+# TAB 5: CONTEXTO METEOROLÓGICO Y VIENTO
 # ------------------------------------------
 with tab5:
-    st.subheader("Contexto Meteorologico y Dispension")
-    st.write("Analiza como la temperatura y la velocidad del viento afectan la concentracion de contaminantes.")
+    st.subheader("Contexto Meteorologico y Direccion del Viento")
+    st.write("Cruce de datos climaticos que afectan la dispersion de la contaminacion.")
 
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: reg_m = st.selectbox("Region", list(DICCIONARIO_ZONAS.keys()), index=3, key="reg_m")
@@ -526,8 +392,6 @@ with tab5:
     with col_m3: est_m = st.selectbox("Estacion Especifica", list(DICCIONARIO_ZONAS[reg_m][com_m].keys()), key="est_m")
 
     lat_m, lon_m = DICCIONARIO_ZONAS[reg_m][com_m][est_m]
-    
-    # Extraer meteorología de la nueva API
     df_met = obtener_meteorologia(lat_m, lon_m)
     
     if not df_met.empty:
@@ -535,15 +399,17 @@ with tab5:
             idx_actual_met = df_met['Fecha y Hora'].get_indexer([ahora], method='nearest')[0]
             temp_actual = df_met.iloc[idx_actual_met]['Temperatura (°C)']
             viento_actual = df_met.iloc[idx_actual_met]['Velocidad Viento (km/h)']
+            dir_grados = df_met.iloc[idx_actual_met]['Direccion Viento (°)']
+            dir_cardinal = grados_a_cardinal(dir_grados)
         except:
-            temp_actual, viento_actual = 0, 0
+            temp_actual, viento_actual, dir_grados, dir_cardinal = 0, 0, 0, "N/A"
 
         st.markdown(f"**Condiciones Actuales en {est_m}**")
-        col_k1, col_k2, col_k3 = st.columns(3)
+        col_k1, col_k2, col_k3, col_k4 = st.columns(4)
         with col_k1: st.metric("🌡️ Temperatura", f"{temp_actual:.1f} °C")
-        with col_k2: st.metric("🌬️ Velocidad del Viento", f"{viento_actual:.1f} km/h")
-        with col_k3:
-            # Buscar el dato actual del contaminante global elegido
+        with col_k2: st.metric("🌬️ Velocidad Viento", f"{viento_actual:.1f} km/h")
+        with col_k3: st.metric("🧭 Direccion Viento", f"{dir_cardinal} ({dir_grados}°)")
+        with col_k4:
             val_c_str = "Sin datos"
             if reg_m in datos_totales and com_m in datos_totales[reg_m] and est_m in datos_totales[reg_m][com_m]:
                 serie_cont = datos_totales[reg_m][com_m][est_m]
@@ -553,22 +419,58 @@ with tab5:
                         val_c = serie_cont.iloc[idx_c]
                         val_c_str = f"{val_c:.1f} µg/m³"
                     except: pass
-            st.metric(f"☁️ Concentracion ({contaminante_elegido})", val_c_str)
+            st.metric(f"☁️ {contaminante_elegido}", val_c_str)
 
         st.divider()
 
-        st.markdown("**Evolucion de la Temperatura (Inversion Termica)**")
+        st.markdown("**Evolucion de la Temperatura (Riesgo de Inversion Termica)**")
         fig_temp = px.line(df_met, x='Fecha y Hora', y='Temperatura (°C)')
         fig_temp.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-        fig_temp.add_vrect(x0=ahora, x1=df_met['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
         fig_temp.update_traces(line_color="#FFA500")
         st.plotly_chart(fig_temp, use_container_width=True)
 
-        st.markdown("**Evolucion de la Velocidad del Viento (Dispersion de Gases)**")
+        st.markdown("**Evolucion de la Velocidad del Viento (Capacidad de Dispersion)**")
         fig_viento = px.line(df_met, x='Fecha y Hora', y='Velocidad Viento (km/h)')
         fig_viento.add_vline(x=ahora, line_width=2, line_dash="dash", line_color="white", annotation_text="AHORA")
-        fig_viento.add_vrect(x0=ahora, x1=df_met['Fecha y Hora'].max(), fillcolor="blue", opacity=0.1, layer="below", line_width=0)
         fig_viento.update_traces(line_color="#00CED1")
         st.plotly_chart(fig_viento, use_container_width=True)
+
+# ------------------------------------------
+# TAB 6: MAPA DE DISPERSIÓN (GRADIENTE TÉRMICO)
+# ------------------------------------------
+with tab6:
+    st.subheader("Mapa de Dispersion (Modelamiento por Densidad Espacial)")
+    st.write("Estima las concentraciones en las zonas intermedias (donde no hay hardware) interpolando los datos de las estaciones cercanas activas. Las areas brillantes indican alta acumulacion de gases.")
+    
+    if not df_mapa.empty:
+        # Selector para enfocar la cámara del mapa
+        regiones_disp = list(df_mapa['Region'].unique())
+        reg_mapa = st.selectbox("Enfocar cámara en la Región:", regiones_disp, index=0 if "Región Metropolitana" not in regiones_disp else regiones_disp.index("Región Metropolitana"))
+        
+        # Obtenemos el centro de la región seleccionada para hacer zoom
+        df_region_mapa = df_mapa[df_mapa['Region'] == reg_mapa]
+        if not df_region_mapa.empty:
+            lat_centro = df_region_mapa['Latitud'].mean()
+            lon_centro = df_region_mapa['Longitud'].mean()
+        else:
+            lat_centro, lon_centro = -35.0, -71.0
+
+        # Creación del Heatmap de Plotly
+        fig_heat = px.density_mapbox(
+            df_mapa, 
+            lat="Latitud", 
+            lon="Longitud", 
+            z="Concentracion", # La variable que define el "calor" o color
+            radius=45,         # Radio de difuminación hacia los alrededores
+            center={"lat": lat_centro, "lon": lon_centro}, 
+            zoom=8,
+            mapbox_style="carto-darkmatter", 
+            color_continuous_scale="Inferno", # Paleta de colores ardiente
+            opacity=0.7, 
+            hover_name="Estacion",
+            title=f"Gradiente Termico de {contaminante_elegido} a Nivel Nacional"
+        )
+        fig_heat.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
+        st.plotly_chart(fig_heat, use_container_width=True)
     else:
-        st.warning("Servidor meteorologico no disponible en este momento.")
+        st.warning(f"No hay suficientes datos de hardware para modelar el gradiente de {contaminante_elegido}.")
